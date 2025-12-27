@@ -17,21 +17,23 @@ enum Format {
 interface FavoriteButtonProps {
     width: number;
     height: number;
+    // Media URL
     src: string;
+    // Provider source URL
     url: string;
     format: Format;
     className?: string;
 }
+
+const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>(
+    "#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}"
+);
 
 interface AccessoryProps
     extends Pick<FavoriteButtonProps, "width" | "height" | "src"> {
     proxyUrl?: string;
     video?: boolean;
 }
-
-const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>(
-    "#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}"
-);
 
 const Classes = findByPropsLazy("gifFavoriteButton", "ctaButtonContainer");
 
@@ -49,14 +51,15 @@ export default definePlugin({
                         "static isAnimated($1,override){if(!override)return true;"
                 },
                 {
-                    match: "this.props.renderAccessory():null",
-                    replace:
-                        "this.props.renderAccessory():$self.Accessory({...this.props,video:true})"
+                    match: /(?<=this\.props\.renderAccessory\(\):)null/,
+                    replace: "$self.Accessory({...this.props,video:true})"
                 },
+                // Always return static thumbnails for non gif media (mainly videos) to prevent graphical glitches
                 {
                     match: /getSrc\(\i\)\{let \i=/,
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 },
+                // Dont render the GIF tag on non gif media
                 {
                     match: "return this.props.shouldRenderAccessory?",
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
@@ -71,6 +74,7 @@ export default definePlugin({
                     "props=>()=>$self.Accessory({src:props.url,...props,video:false})"
             }
         },
+        // Add a proxyUrl prop alongside the src prop, which only stores the thumbnail url
         {
             find: '"renderOverlayContent","renderLinkComponent"',
             replacement: {
@@ -80,6 +84,8 @@ export default definePlugin({
         }
     ],
     Accessory({ src, proxyUrl, width, height, video }: AccessoryProps) {
+        if (!width || !height || !src) return null;
+
         return (
             <FavoriteButton
                 format={video ? Format.VIDEO : Format.IMAGE}

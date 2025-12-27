@@ -30,7 +30,7 @@ const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>(
 );
 
 interface AccessoryProps
-    extends Pick<FavoriteButtonProps, "width" | "height" | "src"> {
+    extends Pick<FavoriteButtonProps, "width" | "height" | "url"> {
     proxyUrl?: string;
     video?: boolean;
 }
@@ -52,7 +52,8 @@ export default definePlugin({
                 },
                 {
                     match: /(?<=this\.props\.renderAccessory\(\):)null/,
-                    replace: "$self.Accessory({...this.props,video:true})"
+                    replace:
+                        "$self.Accessory({...this.props,url:this.props.src,video:true})"
                 },
                 // Always return static thumbnails for non gif media (mainly videos) to prevent graphical glitches
                 {
@@ -70,8 +71,7 @@ export default definePlugin({
             find: "renderComponentAccessories",
             replacement: {
                 match: /\i=>\(\)=>\{.{200,300}?null\}/,
-                replace:
-                    "props=>()=>$self.Accessory({src:props.url,...props,video:false})"
+                replace: "props=>()=>$self.Accessory({...props,video:false})"
             }
         },
         // Add a proxyUrl prop alongside the src prop, which only stores the thumbnail url
@@ -83,15 +83,15 @@ export default definePlugin({
             }
         }
     ],
-    Accessory({ src, proxyUrl, width, height, video }: AccessoryProps) {
-        if (!width || !height || !src) return null;
+    Accessory({ url, proxyUrl, width, height, video }: AccessoryProps) {
+        if (!width || !height || !url) return null;
 
         return (
             <FavoriteButton
                 format={video ? Format.VIDEO : Format.IMAGE}
                 className={Classes?.gifFavoriteButton}
-                src={proxyUrl ?? src}
-                url={src}
+                src={proxyUrl ?? url}
+                url={url}
                 width={width}
                 height={height}
             />

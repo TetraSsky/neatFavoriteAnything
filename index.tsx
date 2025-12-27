@@ -44,13 +44,18 @@ export default definePlugin({
             find: "static isAnimated",
             replacement: [
                 {
-                    match: /static isAnimated\(\i\)\{/,
-                    replace: "$&return true;"
+                    match: /static isAnimated\((\i)\)\{/,
+                    replace:
+                        "static isAnimated($1,override){if(!override)return true;"
                 },
                 {
-                    match: /this\.props\.renderAccessory\(\):null/,
+                    match: "this.props.renderAccessory():null",
                     replace:
                         "this.props.renderAccessory():$self.Accessory({...this.props,video:true})"
+                },
+                {
+                    match: /getSrc\(\i\)\{let \i=/,
+                    replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 }
             ]
         },

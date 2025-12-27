@@ -56,6 +56,10 @@ export default definePlugin({
                 {
                     match: /getSrc\(\i\)\{let \i=/,
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
+                },
+                {
+                    match: "return this.props.shouldRenderAccessory?",
+                    replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 }
             ]
         },

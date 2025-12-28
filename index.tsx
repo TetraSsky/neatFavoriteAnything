@@ -56,28 +56,32 @@ export default definePlugin({
         {
             find: "static isAnimated",
             replacement: [
+                // .isAnimated is checked in almost every media overlay event listener, so it's easier to patch the source.
                 {
                     match: /static isAnimated\((\i)\)\{/,
                     replace:
                         "static isAnimated($1,override){if(!override)return true;"
                 },
+                // Always render the custom accessory if the prop wasn't provided. This mostly affects video attachments.
+                // Url and proxyUrl are additionally set to the same value, since the original url property only stores the thumbnail.
                 {
                     match: /(?<=this\.props\.renderAccessory\(\):)null/,
                     replace:
                         "$self.Accessory({...this.props,url:this.props.proxyUrl,video:true})"
                 },
-                // Always return static thumbnails for non gif media (mainly videos) to prevent graphical glitches
+                // Always return static thumbnails for non gif media to prevent graphical glitches (side effect of the first patch).
                 {
                     match: /getSrc\(\i\)\{let \i=/,
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 },
-                // Dont render the GIF tag on non gif media
+                // Hide the default "GIF" tag accessory that is visible when discord is unfocused.
                 {
                     match: "return this.props.shouldRenderAccessory?",
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 }
             ]
         },
+        // Wrap the embed component with a custom context provider to avoid having to drill props.
         {
             find: "#{intl::SUPPRESS_ALL_EMBEDS}",
             replacement: {
@@ -85,6 +89,7 @@ export default definePlugin({
                 replace: "$&{return $self.render.call(this)}__render()"
             }
         },
+        // Replace the default gif accessory with a custom one that skips fileType checks. Mostly affects image attachments.
         {
             find: "renderComponentAccessories",
             replacement: {
@@ -92,7 +97,7 @@ export default definePlugin({
                 replace: "props=>()=>$self.Accessory({...props,video:false})"
             }
         },
-        // Add a proxyUrl prop alongside the src prop, which only stores the thumbnail url
+        // Add a proxyUrl prop alongside the src prop, which is used for video thumbnails.
         {
             find: '"renderOverlayContent","renderLinkComponent"',
             replacement: {

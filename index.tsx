@@ -44,6 +44,10 @@ interface AccessoryProps
 
 const Classes = findByPropsLazy("gifFavoriteButton", "ctaButtonContainer");
 
+interface EmbedComponent extends Component<{ embed: Embed }> {
+    __render: () => ReactNode;
+}
+
 const EmbedContext = proxyLazyWebpack(() =>
     React.createContext<null | Embed>(null)
 );
@@ -86,7 +90,7 @@ export default definePlugin({
             find: "#{intl::SUPPRESS_ALL_EMBEDS}",
             replacement: {
                 match: "render()",
-                replace: "$&{return $self.render.call(this)}__render()"
+                replace: "$&{return $self.renderEmbed.call(this)}__render()"
             }
         },
         // Replace the default gif accessory with a custom one that skips fileType checks. Mostly affects image attachments.
@@ -106,7 +110,7 @@ export default definePlugin({
             }
         }
     ],
-    render(this: Component<{ embed: Embed }> & { __render: () => ReactNode }) {
+    renderEmbed(this: EmbedComponent) {
         return (
             <EmbedContext.Provider value={this.props.embed}>
                 {this.__render()}

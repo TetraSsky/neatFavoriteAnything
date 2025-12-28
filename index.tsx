@@ -55,7 +55,7 @@ const EmbedContext = proxyLazyWebpack(() =>
 export default definePlugin({
     name: "FavouriteAnything",
     description: "Favourite any image",
-    authors: [Devs.nin0dev],
+    authors: [Devs.nin0dev, { name: "Davri", id: 457579346282938368n }],
     patches: [
         {
             find: "static isAnimated",

@@ -6,7 +6,14 @@
 
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
+import { Embed } from "@vencord/discord-types";
+import {
+    findByPropsLazy,
+    findComponentByCodeLazy,
+    proxyLazyWebpack
+} from "@webpack";
+import { React } from "@webpack/common";
+import { Component, ReactNode } from "react";
 
 enum Format {
     NONE = 0,
@@ -37,6 +44,10 @@ interface AccessoryProps
 
 const Classes = findByPropsLazy("gifFavoriteButton", "ctaButtonContainer");
 
+const EmbedContext = proxyLazyWebpack(() =>
+    React.createContext<null | Embed>(null)
+);
+
 export default definePlugin({
     name: "FavouriteAnything",
     description: "Favourite any image",
@@ -53,7 +64,7 @@ export default definePlugin({
                 {
                     match: /(?<=this\.props\.renderAccessory\(\):)null/,
                     replace:
-                        "$self.Accessory({...this.props,url:this.props.src,video:true})"
+                        "$self.Accessory({...this.props,url:this.props.proxyUrl,video:true})"
                 },
                 // Always return static thumbnails for non gif media (mainly videos) to prevent graphical glitches
                 {
@@ -66,6 +77,13 @@ export default definePlugin({
                     replace: "$&!this.constructor.isAnimated(this.props,true)||"
                 }
             ]
+        },
+        {
+            find: "#{intl::SUPPRESS_ALL_EMBEDS}",
+            replacement: {
+                match: "render()",
+                replace: "$&{return $self.render.call(this)}__render()"
+            }
         },
         {
             find: "renderComponentAccessories",
@@ -83,7 +101,27 @@ export default definePlugin({
             }
         }
     ],
-    Accessory({ url, proxyUrl, width, height, video }: AccessoryProps) {
+    render(this: Component<{ embed: Embed }> & { __render: () => ReactNode }) {
+        return (
+            <EmbedContext.Provider value={this.props.embed}>
+                {this.__render()}
+            </EmbedContext.Provider>
+        );
+    },
+    Accessory(props: AccessoryProps) {
+        const embed = React.useContext(EmbedContext);
+        const content = embed?.image ?? embed?.video;
+
+        const { url, proxyUrl, width, height, video } =
+            embed && content
+                ? {
+                      ...content,
+                      url: (embed.type === "gifv" && embed.url) || content.url,
+                      proxyUrl: content.proxyURL,
+                      video: !!embed.video
+                  }
+                : props;
+
         if (!width || !height || !url) return null;
 
         return (

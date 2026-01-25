@@ -8,8 +8,8 @@ import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { Embed } from "@vencord/discord-types";
 import {
-    findByPropsLazy,
     findComponentByCodeLazy,
+    findCssClassesLazy,
     proxyLazyWebpack
 } from "@webpack";
 import { React } from "@webpack/common";
@@ -42,7 +42,7 @@ interface AccessoryProps
     video?: boolean;
 }
 
-const Classes = findByPropsLazy("gifFavoriteButton", "ctaButtonContainer");
+const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
 
 interface EmbedComponent extends Component<{ embed: Embed }> {
     __render: () => ReactNode;

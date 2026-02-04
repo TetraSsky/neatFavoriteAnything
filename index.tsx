@@ -103,9 +103,9 @@ export default definePlugin({
         },
         // Add a proxyUrl prop alongside the src prop, which is used for video thumbnails.
         {
-            find: '"renderOverlayContent","renderLinkComponent"',
+            find: "#{intl::VIDEO}),...",
             replacement: {
-                match: /src:\i(?=\})/,
+                match: /src:\i(?=,\.\.\.)/,
                 replace: "$&,proxyUrl:this.props.src"
             }
         }

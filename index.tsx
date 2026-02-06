@@ -4,40 +4,21 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./style.css";
+
 import { Devs } from "@utils/constants";
+import { getIntlMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
 import { Embed } from "@vencord/discord-types";
-import {
-    findComponentByCodeLazy,
-    findCssClassesLazy,
-    proxyLazyWebpack
-} from "@webpack";
-import { React } from "@webpack/common";
-import { Component, ReactNode } from "react";
+import { findCssClassesLazy, proxyLazyWebpack } from "@webpack";
+import { React, useMemo } from "@webpack/common";
+import { Component, ComponentType, ReactNode } from "react";
 
-enum Format {
-    NONE = 0,
-    IMAGE = 1,
-    VIDEO = 2
-}
+import { FavoriteButton, FavoriteButtonProps, FilePicker } from "./components";
+import { AttachmentItem, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItemFormat } from "./types";
+import { encodeAttachment } from "./utils";
 
-interface FavoriteButtonProps {
-    width: number;
-    height: number;
-    // Media URL
-    src: string;
-    // Provider source URL
-    url: string;
-    format: Format;
-    className?: string;
-}
-
-const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>(
-    "#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}"
-);
-
-interface AccessoryProps
-    extends Pick<FavoriteButtonProps, "width" | "height" | "url"> {
+interface AccessoryProps extends Pick<FavoriteButtonProps, "width" | "height" | "url"> {
     proxyUrl?: string;
     video?: boolean;
 }
@@ -48,30 +29,31 @@ interface EmbedComponent extends Component<{ embed: Embed }> {
     __render: () => ReactNode;
 }
 
-const EmbedContext = proxyLazyWebpack(() =>
-    React.createContext<null | Embed>(null)
-);
+const EmbedContext = proxyLazyWebpack(() => React.createContext<null | Embed>(null));
+
+const AttachmentContext = proxyLazyWebpack(() => React.createContext<null | AttachmentItem>(null));
+
+// const forbiddenTypes: Set<AttachmentItem["type"]> = new Set(["IMAGE", "VIDEO", "VISUAL_PLACEHOLDER", "INVALID"]);
 
 export default definePlugin({
     name: "FavouriteAnything",
     description: "Favourite any image",
     authors: [Devs.nin0dev, { name: "Davri", id: 457579346282938368n }],
     patches: [
+        // TODO: Remove old patches, instead of gifAccessory use generic attachment component accessories
         {
             find: "static isAnimated",
             replacement: [
                 // .isAnimated is checked in almost every media overlay event listener, so it's easier to patch the source.
                 {
                     match: /static isAnimated\((\i)\)\{/,
-                    replace:
-                        "static isAnimated($1,override){if(!override)return true;"
+                    replace: "static isAnimated($1,override){if(!override)return true;"
                 },
                 // Always render the custom accessory if the prop wasn't provided. This mostly affects video attachments.
                 // Url and proxyUrl are additionally set to the same value, since the original url property only stores the thumbnail.
                 {
                     match: /(?<=this\.props\.renderAccessory\(\):)null/,
-                    replace:
-                        "$self.Accessory({...this.props,url:this.props.proxyUrl,video:true})"
+                    replace: "$self.Accessory({...this.props,url:this.props.proxyUrl,video:true})"
                 },
                 // Always return static thumbnails for non gif media to prevent graphical glitches (side effect of the first patch).
                 {
@@ -108,13 +90,93 @@ export default definePlugin({
                 match: /src:\i(?=,\.\.\.)/,
                 replace: "$&,proxyUrl:this.props.src"
             }
+        },
+        {
+            find: '["VIDEO","CLIP","AUDIO"]',
+            replacement: [
+                {
+                    match: /function \i\((\i)\)\{let/,
+                    replace: "$& __props=$1,"
+                },
+                {
+                    match: /renderAdjacentContent:(\i)/g,
+                    replace: "renderAdjacentContent:$self.renderAdjacent($1,__props)"
+                },
+                {
+                    match: "=[];",
+                    replace: "=[$self.AdjacentAccessory()];"
+                }
+            ]
+        },
+        {
+            find: "#{intl::EXPRESSION_PICKER_CATEGORIES_A11Y_LABEL}",
+            replacement: [
+                {
+                    match: /\(0,\i\.jsx\)\((\i),.{20,40}"aria-selected":(\i).{50,100}#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
+                    replace: "$self.renderTabs($1,$2)"
+                },
+                {
+                    match: /(?<=null,)(\i)===\i\.\i\.EMOJI/,
+                    replace: "$self.renderFilePicker($1),$&"
+                }
+            ]
         }
     ],
-    renderEmbed(this: EmbedComponent) {
+    renderTabs(Tab: ComponentType<ExpressionPickerTabProps>, activeView: ExpressionPickerView) {
         return (
-            <EmbedContext.Provider value={this.props.embed}>
-                {this.__render()}
-            </EmbedContext.Provider>
+            <>
+                <Tab
+                    id="gif-picker-tab"
+                    key="gif-picker-tab"
+                    aria-controls="gif-picker-tab-panel"
+                    aria-selected={activeView === ExpressionPickerView.GIF}
+                    isActive={activeView === ExpressionPickerView.GIF}
+                    viewType={ExpressionPickerView.GIF}
+                >
+                    Media
+                </Tab>
+                <Tab
+                    id="files-picker-tab"
+                    key="files-picker-tab"
+                    aria-controls="files-picker-tab-panel"
+                    aria-selected={activeView === ExpressionPickerView.FILES}
+                    isActive={activeView === ExpressionPickerView.FILES}
+                    viewType={ExpressionPickerView.FILES}
+                >
+                    {getIntlMessage("FILES")}
+                </Tab>
+            </>
+        );
+    },
+    renderFilePicker(activeView: ExpressionPickerView) {
+        return activeView === ExpressionPickerView.FILES ? <FilePicker /> : null;
+    },
+    renderAdjacent(render: () => ReactNode, props: { item: AttachmentItem }) {
+        return () => <AttachmentContext.Provider value={props.item}>{render()}</AttachmentContext.Provider>;
+    },
+    renderEmbed(this: EmbedComponent) {
+        return <EmbedContext.Provider value={this.props.embed}>{this.__render()}</EmbedContext.Provider>;
+    },
+    // TODO: move all components to components.tsx
+    AdjacentAccessory() {
+        const attachment = React.useContext(AttachmentContext);
+        if (!attachment) return null;
+
+        return <this.AdjacentAccessoryComponent {...attachment} />;
+    },
+    AdjacentAccessoryComponent({ originalItem, downloadUrl }: AttachmentItem) {
+        const thumbnail = useMemo(() => encodeAttachment(originalItem)?.toString(), [originalItem]);
+        if (!downloadUrl) return null;
+
+        return (
+            <FavoriteButton
+                // TODO: Change format depending on the type prop
+                format={FavouriteItemFormat.NONE}
+                url={downloadUrl}
+                src={thumbnail ?? downloadUrl}
+                width={600}
+                height={400}
+            />
         );
     },
     Accessory(props: AccessoryProps) {
@@ -135,7 +197,7 @@ export default definePlugin({
 
         return (
             <FavoriteButton
-                format={video ? Format.VIDEO : Format.IMAGE}
+                format={video ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
                 className={Classes?.gifFavoriteButton}
                 src={proxyUrl ?? url}
                 url={url}

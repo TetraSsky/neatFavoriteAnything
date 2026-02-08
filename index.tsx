@@ -15,7 +15,13 @@ import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
 import { AttachmentAccessory, EmbedAccessory, EmbedComponent, FilePicker } from "./components";
-import { AttachmentItem, ExpressionPickerTabProps, ExpressionPickerView } from "./types";
+import {
+    AttachmentItem,
+    ExpressionPickerTabProps,
+    ExpressionPickerView,
+    FavouriteItem,
+    FavouriteItemFormat
+} from "./types";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | Embed>(null));
 export const AttachmentContext = proxyLazyWebpack(() => React.createContext<null | AttachmentItem>(null));
@@ -68,6 +74,13 @@ export default definePlugin({
                     replace: "$self.renderFilePicker($1),$&"
                 }
             ]
+        },
+        {
+            find: '.sortBy("order").reverse().value()',
+            replacement: {
+                match: '.sortBy("order").reverse()',
+                replace: "$&.filter($self.filterGifs)"
+            }
         }
     ],
     renderTabs(Tab: ComponentType<ExpressionPickerTabProps>, activeView: ExpressionPickerView) {
@@ -106,5 +119,6 @@ export default definePlugin({
         return <EmbedContext.Provider value={this.props.embed}>{this.__render()}</EmbedContext.Provider>;
     },
     renderAttachmentAccessory: () => <AttachmentAccessory />,
-    renderEmbedAccessory: () => <EmbedAccessory />
+    renderEmbedAccessory: () => <EmbedAccessory />,
+    filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE
 });

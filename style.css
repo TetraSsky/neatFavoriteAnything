@@ -52,3 +52,17 @@
         opacity: 0.2;
     }
 }
+
+.vc-favouriteAnything-image-accessory {
+    inset-inline-start: 6px;
+    inset-inline-end: unset;
+    position: absolute;
+    top: 6px;
+    z-index: 3;
+    cursor: pointer;
+
+    :is(.imageWrapper:is(:hover, :focus-within) ~ &, :hover, :focus-within) > [class*="gifFavoriteButton"] {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

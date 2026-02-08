@@ -4,15 +4,23 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Channel, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
+import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
-import { findByCode, findByProps, findComponentByCode, findComponentByCodeLazy, proxyLazyWebpack } from "@webpack";
-import { ListScrollerThin, useEffect, useMemo, useRef, useStateFromStores } from "@webpack/common";
+import {
+    findByCode,
+    findByProps,
+    findComponentByCode,
+    findComponentByCodeLazy,
+    findCssClassesLazy,
+    proxyLazyWebpack
+} from "@webpack";
+import { ListScrollerThin, React, useEffect, useMemo, useRef, useStateFromStores } from "@webpack/common";
 import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, ComponentType, ReactNode } from "react";
 
+import { AttachmentContext, EmbedContext } from ".";
 import { AttachmentUrlsStore } from "./stores";
-import { FavouriteItem } from "./types";
-import { cl, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { FavouriteItem, FavouriteItemFormat } from "./types";
+import { cl, encodeAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
 export const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight"> & {
@@ -168,4 +176,56 @@ export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
             <Attachments attachments={attachments} />
         </div>
     );
+}
+
+const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
+
+export function EmbedAccessory() {
+    const embed = React.useContext(EmbedContext);
+    console.log("EMBED", embed);
+    const content = embed?.image ?? embed?.video;
+
+    if (!embed || !content || embed.type === "gifv") return null;
+
+    return (
+        <div className={cl("image-accessory")}>
+            <FavoriteButton
+                {...content}
+                className={Classes.gifFavoriteButton}
+                format={embed.video ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
+                src={content.proxyURL ?? content.url}
+            />
+        </div>
+    );
+}
+
+export function AttachmentAccessory() {
+    const attachment = React.useContext(AttachmentContext);
+    console.log("ATTACHMENT", attachment);
+
+    const { originalItem, type, downloadUrl, width, height, srcIsAnimated } = attachment ?? {};
+    const isMedia = type === "IMAGE" || type === "VIDEO";
+
+    const src = useMemo(() => {
+        if (!originalItem) return null;
+        return isMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
+    }, [isMedia, originalItem]);
+
+    if (!src || !downloadUrl || srcIsAnimated) return null;
+
+    return isMedia ? (
+        <FavoriteButton
+            format={type === "VIDEO" ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
+            url={downloadUrl}
+            src={src}
+            width={width!}
+            height={height!}
+        />
+    ) : (
+        <FavoriteButton format={FavouriteItemFormat.NONE} url={downloadUrl} src={src} width={600} height={400} />
+    );
+}
+
+export interface EmbedComponent extends Component<{ embed: Embed }> {
+    __render: () => ReactNode;
 }

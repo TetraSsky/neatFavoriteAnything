@@ -182,8 +182,9 @@ const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
 
 export function EmbedAccessory() {
     const embed = React.useContext(EmbedContext);
-    console.log("EMBED", embed);
-    const content = embed?.image ?? embed?.video;
+
+    const { image, video, thumbnail } = embed ?? {};
+    const content = video ?? image;
 
     if (!embed || !content || embed.type === "gifv") return null;
 
@@ -192,8 +193,9 @@ export function EmbedAccessory() {
             <FavoriteButton
                 {...content}
                 className={Classes.gifFavoriteButton}
-                format={embed.video ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
-                src={content.proxyURL ?? content.url}
+                format={video?.proxyURL ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
+                url={(video?.proxyURL && content?.url) || embed.url!}
+                src={video?.proxyURL ?? thumbnail?.proxyURL ?? content.url}
             />
         </div>
     );
@@ -201,19 +203,18 @@ export function EmbedAccessory() {
 
 export function AttachmentAccessory() {
     const attachment = React.useContext(AttachmentContext);
-    console.log("ATTACHMENT", attachment);
 
     const { originalItem, type, downloadUrl, width, height, srcIsAnimated } = attachment ?? {};
-    const isMedia = type === "IMAGE" || type === "VIDEO";
+    const isVisualMedia = type === "IMAGE" || type === "VIDEO";
 
     const src = useMemo(() => {
         if (!originalItem) return null;
-        return isMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
-    }, [isMedia, originalItem]);
+        return isVisualMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
+    }, [isVisualMedia, originalItem]);
 
     if (!src || !downloadUrl || srcIsAnimated) return null;
 
-    return isMedia ? (
+    return isVisualMedia ? (
         <FavoriteButton
             format={type === "VIDEO" ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
             url={downloadUrl}

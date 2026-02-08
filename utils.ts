@@ -55,7 +55,6 @@ export function decodeAttachment(url: URL | null): MessageAttachment | null {
     if (!url) return null;
 
     try {
-        // TODO: Add types to Uint8Array
         const buf = Uint8Array.fromBase64(url.hash.replace("#", ""), { alphabet: "base64url" });
         const data = new TextDecoder().decode(inflateSync(buf));
         const parsed: Partial<EncodedItem> | null = JSON.parse(data);

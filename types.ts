@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { FluxEvents, MessageAttachment } from "@vencord/discord-types";
+import { EmbedJSON, FluxEvents, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
 
 declare global {
@@ -70,6 +70,20 @@ export interface FavouriteItem {
     order: number;
 }
 
+export enum CustomItemFormat {
+    ATTACHMENT = 0
+}
+
+export interface CustomItemDef<A = any, B = any> {
+    encode: (data: A) => B | null;
+    decode: (data: B) => NoInfer<A> | null;
+    stringify: (data: A) => string;
+}
+
+export type ItemsDef<T> = T & {
+    [K in keyof T]: T[K] extends CustomItemDef<infer A, infer B> ? CustomItemDef<A, B> : never;
+};
+
 export interface RefreshedUrlsResponse {
     refreshed_urls: [
         {
@@ -79,7 +93,9 @@ export interface RefreshedUrlsResponse {
     ];
 }
 
-export type EncodedItem = [id: string, filename: string, size: number, path: string, contentType: string];
+export interface UnfurledEmbedsResponse {
+    embeds: EmbedJSON[];
+}
 
 export type FluxEventHandlers<T extends Partial<Record<FluxEvents, unknown>>> = {
     [K in keyof T]?: (data: T[K]) => void;

@@ -10,6 +10,8 @@ import { useForceUpdater } from "@utils/react";
 import { MessageAttachment } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
 import {
+    Constants,
+    RestAPI,
     useCallback,
     useEffect,
     useRef,
@@ -21,47 +23,64 @@ import {
 import { deflateSync, inflateSync } from "fflate";
 import { RefObject } from "react";
 
-import { EncodedItem, FavouriteItem, FavouriteItemFormat } from "./types";
+import {
+    CustomItemDef,
+    CustomItemFormat,
+    FavouriteItem,
+    FavouriteItemFormat,
+    ItemsDef,
+    UnfurledEmbedsResponse
+} from "./types";
 
 export const cl = classNameFactory("vc-favouriteAnything-");
 
-export function encodeAttachment(attachment: MessageAttachment): URL | null {
-    try {
-        const obj: EncodedItem = [
-            attachment.id,
-            attachment.filename,
-            attachment.size,
-            new URL(attachment.url).pathname,
-            attachment.content_type ?? ""
-        ];
+const defineItem = <const A, const B>(item: CustomItemDef<A, B>) => item;
+function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: ItemsDef<T>) {
+    type Type<F extends CustomItemFormat> = T[F] extends CustomItemDef<infer A> ? A : never;
 
-        const buf = deflateSync(new TextEncoder().encode(JSON.stringify(obj)));
+    return {
+        encode: <F extends CustomItemFormat>(format: F, data: Type<F>) => {
+            try {
+                const obj = [format, def[format].encode(data)];
 
-        // TODO: Replace with proper thumbnails
-        const url = new URL(
-            "https://images-ext-1.discordapp.net/external/1bdEiJ7hceqFJZJF6nIJFkL1Eyz0KlRp0ATBcM5vfh8/https/1.1.1.1/media/social-share.png?format=webp&quality=lossless&width=800&height=468"
-        );
-        url.search = "";
-        url.hash = buf.toBase64({ alphabet: "base64url", omitPadding: true });
+                const buf = deflateSync(new TextEncoder().encode(JSON.stringify(obj)));
+                return buf.toBase64({ alphabet: "base64url", omitPadding: true });
+            } catch {
+                return null;
+            }
+        },
+        decode: (raw: string) => {
+            try {
+                if (!raw) return null;
 
-        return url;
-    } catch {
-        return null;
-    }
+                const buf = inflateSync(Uint8Array.fromBase64(raw, { alphabet: "base64url" }));
+                const parsed: unknown[] | null = JSON.parse(new TextDecoder().decode(buf));
+                if (!Array.isArray(parsed)) return null;
+
+                const [format, data] = parsed as [keyof typeof def, unknown];
+                if (!(format in def)) return null;
+
+                return { format, data: def[format].decode(data) } as {
+                    [F in CustomItemFormat]: { format: F; data: Type<F> };
+                }[CustomItemFormat];
+            } catch {
+                return null;
+            }
+        },
+        stringify: <F extends CustomItemFormat>(format: F, item: Type<F>) => def[format].stringify(item)
+    };
 }
 
-export function decodeAttachment(url: URL | null): MessageAttachment | null {
-    if (!url) return null;
-
-    try {
-        const buf = Uint8Array.fromBase64(url.hash.replace("#", ""), { alphabet: "base64url" });
-        const data = new TextDecoder().decode(inflateSync(buf));
-        const parsed: Partial<EncodedItem> | null = JSON.parse(data);
-        if (!Array.isArray(parsed)) return null;
-
-        const [id, filename, size, path, content_type] = parsed;
-
-        return {
+export const defs = defineItems({
+    [CustomItemFormat.ATTACHMENT]: defineItem({
+        encode: ({ id, filename, size, url, content_type = "" }: MessageAttachment) => [
+            id,
+            filename,
+            size,
+            new URL(url).pathname,
+            content_type
+        ],
+        decode: ([id, filename, size, path, content_type]) => ({
             id: `${id}`,
             filename: `${filename}`,
             size: +size! || 0,
@@ -69,9 +88,34 @@ export function decodeAttachment(url: URL | null): MessageAttachment | null {
             proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
             content_type: `${content_type}`,
             spoiler: false
-        };
+        }),
+        stringify: ({ filename }) => filename
+    })
+});
+
+// TODO: replace with something nicer looking idk
+const fallbackThumbnail =
+    "https://images-ext-1.discordapp.net/external/S4K7rlM4DWPFINDZKKmlrGGi3ULoMG4R6rcwRlQz8LU/%3Ftext%3Dinvalid/https/placehold.jp/42/444/fff/600x400.png";
+
+export async function getThumbnailUrl(data: string): Promise<URL | null> {
+    try {
+        const decoded = defs.decode(data);
+        if (!decoded) return null;
+
+        const text = defs.stringify(decoded.format, decoded.data);
+        const url = new URL("https://placehold.jp/42/444/fff/600x400.png");
+        url.searchParams.append("text", text);
+
+        return await RestAPI.post({
+            url: Constants.Endpoints.UNFURL_EMBED_URLS,
+            body: { urls: [url] },
+            retries: 3
+        }).then(({ body }: { body: UnfurledEmbedsResponse }) => {
+            const [{ thumbnail } = {}] = body.embeds;
+            return new URL(thumbnail?.proxy_url ?? fallbackThumbnail);
+        });
     } catch {
-        return null;
+        return new URL(fallbackThumbnail);
     }
 }
 
@@ -98,7 +142,7 @@ function normalize(str: string) {
     return str.normalize("NFKC").toLowerCase().trim();
 }
 
-export function useFavourites() {
+export function useFavourites(itemFormat: CustomItemFormat) {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -110,14 +154,18 @@ export function useFavourites() {
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
             if (!items) return { query, state: null };
 
-            const attachments = Object.entries(items)
+            const validItems = Object.entries(items)
                 .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
-                .map(([url, { src, ...rest }]) => ({ ...rest, url, src: decodeAttachment(URL.parse(src))! }))
-                .filter(({ src }) => src);
+                .map(([url, { src, ...rest }]) => ({
+                    ...rest,
+                    ...defs.decode(URL.parse(src)?.hash.replace("#", "") ?? "")!,
+                    url
+                }))
+                .filter(({ format, data }) => data && format === itemFormat);
 
             const filtered = query
-                ? attachments.filter(item => normalize(item.src.filename).includes(query))
-                : attachments;
+                ? validItems.filter(({ format, data }) => normalize(defs.stringify(format, data)).includes(query))
+                : validItems;
 
             return { query, state: filtered.sort((a, b) => b.order - a.order) };
         },

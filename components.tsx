@@ -20,8 +20,8 @@ import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, Compo
 
 import { AttachmentContext, EmbedContext } from ".";
 import { AttachmentUrlsStore } from "./stores";
-import { AttachmentItem, FavouriteItem, FavouriteItemFormat } from "./types";
-import { cl, encodeAttachment, ImageUtils, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
+import { cl, defs, ImageUtils, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
 const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight"> & {
@@ -97,7 +97,7 @@ interface ManaSearchBarProps extends Pick<
 export const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 
 export function FilePicker() {
-    const [favs, query, setQuery] = useFavourites();
+    const [favs, query, setQuery] = useFavourites(CustomItemFormat.ATTACHMENT);
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
     const [rowHeights, handleResize] = useListScroller(count);
 
@@ -108,7 +108,7 @@ export function FilePicker() {
                 if (!item) return null;
 
                 return (
-                    <FilePickerItem key={item.url} url={item.url} file={item.src} row={row} onResize={handleResize} />
+                    <FilePickerItem key={item.url} url={item.url} file={item.data} row={row} onResize={handleResize} />
                 );
             }
             case 1: {
@@ -270,7 +270,9 @@ export function AttachmentAccessory() {
         if (isAnimated) return null;
 
         const isVisualMedia = type === "IMAGE" || type === "VIDEO" || type === "CLIP";
-        const src = isVisualMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
+        const src = isVisualMedia
+            ? originalItem.proxy_url
+            : defs.encode(CustomItemFormat.ATTACHMENT, originalItem)?.toString();
         if (!src) return null;
 
         const format = (type && itemFormats[type]) || FavouriteItemFormat.NONE;

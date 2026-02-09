@@ -22,6 +22,7 @@ import {
     FavouriteItem,
     FavouriteItemFormat
 } from "./types";
+import { getThumbnailUrl } from "./utils";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | Embed>(null));
 export const AttachmentContext = proxyLazyWebpack(() => React.createContext<null | AttachmentItem>(null));
@@ -81,6 +82,13 @@ export default definePlugin({
                 match: '.sortBy("order").reverse()',
                 replace: "$&.filter($self.filterGifs)"
             }
+        },
+        {
+            find: "#{intl::GIF_TOOLTIP_REMOVE_FROM_FAVORITES}",
+            replacement: {
+                match: /\(0,(\i\.\i)\)\((\{[^}].{40,60}\})\)/,
+                replace: "$self.getThumbnail($2).then($1)"
+            }
         }
     ],
     renderTabs(Tab: ComponentType<ExpressionPickerTabProps>, activeView: ExpressionPickerView) {
@@ -120,5 +128,15 @@ export default definePlugin({
     },
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,
-    filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE
+    filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE,
+    getThumbnail: async (item: FavouriteItem) => {
+        if (item.format !== FavouriteItemFormat.NONE || URL.canParse(item.src)) return item;
+
+        const url = await getThumbnailUrl(item.src);
+        if (!url) return item;
+
+        url.search = "";
+        url.hash = item.src;
+        return { ...item, src: `${url}` };
+    }
 });

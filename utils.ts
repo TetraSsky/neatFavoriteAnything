@@ -8,11 +8,10 @@ import { classNameFactory } from "@utils/css";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { MessageAttachment } from "@vencord/discord-types";
+import { findByPropsLazy } from "@webpack";
 import {
-    lodash,
     useCallback,
     useEffect,
-    useMemo,
     useRef,
     UserSettingsActionCreators,
     UserSettingsProtoStore,
@@ -103,32 +102,32 @@ export function useFavourites() {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
     const [searchQuery, setSearchQuery] = useState("");
 
-    const state = useStateFromStores(
+    const { state } = useStateFromStores(
         [UserSettingsProtoStore],
         () => {
+            const query = normalize(searchQuery);
             const items: Record<string, FavouriteItem> | null =
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
-            if (!items) return null;
+            if (!items) return { query, state: null };
 
-            return Object.entries(items)
+            const attachments = Object.entries(items)
                 .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
                 .map(([url, { src, ...rest }]) => ({ ...rest, url, src: decodeAttachment(URL.parse(src))! }))
-                .filter(({ src }) => src)
-                .sort((a, b) => b.order - a.order);
+                .filter(({ src }) => src);
+
+            const filtered = query
+                ? attachments.filter(item => normalize(item.src.filename).includes(query))
+                : attachments;
+
+            return { query, state: filtered.sort((a, b) => b.order - a.order) };
         },
-        [],
-        lodash.isEqual
+        [searchQuery],
+        // Do not rerender components using this hook unless the query has changed or the items were loaded for the first time
+        // This matches the behavior of the gif picker, where unfavouriting an item doesn't immediately hide it
+        (prev, next) => !!prev.state === !!next.state && prev.query === next.query
     );
 
-    const filtered = useMemo(() => {
-        const query = normalize(searchQuery);
-        if (!query || !state) return state;
-
-        // TODO: add fuzzy search
-        return state.filter(item => normalize(item.src.filename).includes(query));
-    }, [state, searchQuery]);
-
-    return [filtered, searchQuery, setSearchQuery] as const;
+    return [state, searchQuery, setSearchQuery] as const;
 }
 
 export function useListScroller(count: number) {
@@ -184,3 +183,9 @@ export class BatchedRequestQueue<T> {
         this.queue.push(() => this.cb(batch).catch(() => this.items.push(...batch)));
     }
 }
+
+interface ImageUtils {
+    isAnimated(image: { src: string; original?: string; animated: boolean; srcIsAnimated?: boolean }): boolean;
+}
+
+export const ImageUtils: ImageUtils = findByPropsLazy("isAnimated", "getFormatQuality");

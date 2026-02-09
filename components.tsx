@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { BaseText } from "@components/BaseText";
 import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import {
@@ -19,21 +20,21 @@ import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, Compo
 
 import { AttachmentContext, EmbedContext } from ".";
 import { AttachmentUrlsStore } from "./stores";
-import { FavouriteItem, FavouriteItemFormat } from "./types";
-import { cl, encodeAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { AttachmentItem, FavouriteItem, FavouriteItemFormat } from "./types";
+import { cl, encodeAttachment, ImageUtils, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
-export const ListScroller = ListScrollerThin as ComponentType<
+const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight"> & {
         rowHeight?: number | ((section: number, row: number) => number);
     }
 >;
 
-export interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
+interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
     url: string;
     className?: string;
 }
 
-export const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
+const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
 
 // Partial type, renderAttachments only uses a few props
 interface MessageComponentProps {
@@ -100,7 +101,6 @@ export function FilePicker() {
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
     const [rowHeights, handleResize] = useListScroller(count);
 
-    // TODO: Add empty section rendered when favs are empty
     const renderRow = (section: number, row: number) => {
         switch (section) {
             case 0: {
@@ -112,11 +112,7 @@ export function FilePicker() {
                 );
             }
             case 1: {
-                return (
-                    <div className={cl("scroller-footer")}>
-                        <img src="https://media.discordapp.net/stickers/1039992459209490513.png" />
-                    </div>
-                );
+                return <div className={cl("scroller-footer")} />;
             }
         }
     };
@@ -132,16 +128,59 @@ export function FilePicker() {
                     onClear={() => setQuery("")}
                 />
             </div>
-            <div className={cl("container-body")}>
-                <ListScroller
-                    sections={[count, 1]}
-                    sectionHeight={0}
-                    rowHeight={(section, row) => (section === 1 ? 200 : (rowHeights.current[row] ?? 100))}
-                    renderSection={() => null}
-                    renderRow={({ section, row }) => renderRow(section, row)}
+            {count > 0 ? (
+                <div className={cl("container-body")}>
+                    <ListScroller
+                        sections={[count, 1]}
+                        sectionHeight={0}
+                        rowHeight={(section, row) => (section === 1 ? 12 : (rowHeights.current[row] ?? 100))}
+                        renderSection={() => null}
+                        renderRow={({ section, row }) => renderRow(section, row)}
+                    />
+                </div>
+            ) : (
+                <div className={cl("container-body", "container-info")} inert>
+                    {query.trim() ? <EmptyList /> : <Demo />}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function EmptyList() {
+    return <BaseText className={cl("info-text")}>No files match your search.</BaseText>;
+}
+
+const demoAttachment: MessageAttachment = {
+    id: "1",
+    filename: "file",
+    content_type: "application/octet-stream",
+    size: 123 * 1024,
+    spoiler: false,
+    url: "",
+    proxy_url: ""
+};
+
+function Demo() {
+    return (
+        <>
+            <div className={cl("attachment-container", "demo")}>
+                <Attachments attachments={[demoAttachment]} />
+                <FavoriteButton
+                    className={cl("demo-favourite-button")}
+                    url="https://example.org"
+                    src="https://example.org"
+                    width={100}
+                    height={100}
+                    format={FavouriteItemFormat.NONE}
                 />
             </div>
-        </div>
+            <BaseText className={cl("info-text")}>
+                Click the star to favourite a file.
+                <br />
+                Favourite files will show up here!
+            </BaseText>
+        </>
     );
 }
 
@@ -183,48 +222,63 @@ const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
 export function EmbedAccessory() {
     const embed = React.useContext(EmbedContext);
 
-    const { image, video, thumbnail } = embed ?? {};
-    const content = video ?? image;
+    const props: FavoriteButtonProps | null = useMemo(() => {
+        if (!embed) return null;
 
-    if (!embed || !content || embed.type === "gifv") return null;
+        const { image, video, thumbnail, type } = embed;
+        const content = video ?? image;
+        if (!content) return null;
+
+        const isProxiedVideo = !!video?.proxyURL;
+        const src = content?.proxyURL ?? thumbnail?.proxyURL ?? content.url;
+        const url = !video || isProxiedVideo ? content?.url : embed.url!;
+        const format = isProxiedVideo ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE;
+
+        const isAnimated = ImageUtils.isAnimated({ original: url, src, animated: type === "gifv" });
+        if (isAnimated) return null;
+
+        return { format, src, url, width: content.width, height: content.height };
+    }, [embed]);
 
     return (
-        <div className={cl("image-accessory")}>
-            <FavoriteButton
-                {...content}
-                className={Classes.gifFavoriteButton}
-                format={video?.proxyURL ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
-                url={(video?.proxyURL && content?.url) || embed.url!}
-                src={video?.proxyURL ?? thumbnail?.proxyURL ?? content.url}
-            />
-        </div>
+        props && (
+            <div className={cl("image-accessory")}>
+                <FavoriteButton {...props} className={Classes.gifFavoriteButton} />
+            </div>
+        )
     );
 }
+
+const itemFormats: Partial<Record<AttachmentItem["type"], FavouriteItemFormat>> = Object.freeze({
+    IMAGE: FavouriteItemFormat.IMAGE,
+    VIDEO: FavouriteItemFormat.VIDEO
+});
 
 export function AttachmentAccessory() {
     const attachment = React.useContext(AttachmentContext);
 
-    const { originalItem, type, downloadUrl, width, height, srcIsAnimated } = attachment ?? {};
-    const isVisualMedia = type === "IMAGE" || type === "VIDEO";
+    const props: FavoriteButtonProps | null = useMemo(() => {
+        if (!attachment) return null;
+        const { originalItem, type, downloadUrl, width = 600, height = 400, srcIsAnimated } = attachment;
 
-    const src = useMemo(() => {
-        if (!originalItem) return null;
-        return isVisualMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
-    }, [isVisualMedia, originalItem]);
+        const isAnimated = ImageUtils.isAnimated({
+            original: originalItem.url,
+            src: originalItem.proxy_url,
+            animated: false,
+            srcIsAnimated
+        });
+        if (isAnimated) return null;
 
-    if (!src || !downloadUrl || srcIsAnimated) return null;
+        const isVisualMedia = type === "IMAGE" || type === "VIDEO" || type === "CLIP";
+        const src = isVisualMedia ? originalItem.proxy_url : encodeAttachment(originalItem)?.toString();
+        if (!src) return null;
 
-    return isVisualMedia ? (
-        <FavoriteButton
-            format={type === "VIDEO" ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE}
-            url={downloadUrl}
-            src={src}
-            width={width!}
-            height={height!}
-        />
-    ) : (
-        <FavoriteButton format={FavouriteItemFormat.NONE} url={downloadUrl} src={src} width={600} height={400} />
-    );
+        const format = (type && itemFormats[type]) || FavouriteItemFormat.NONE;
+
+        return { format, src, url: downloadUrl, width, height };
+    }, [attachment]);
+
+    return props && <FavoriteButton {...props} className={cl("attachment-accessory")} />;
 }
 
 export interface EmbedComponent extends Component<{ embed: Embed }> {

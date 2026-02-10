@@ -22,6 +22,7 @@ import {
     ChannelStore,
     ExpressionPickerStore,
     ListScrollerThin,
+    lodash,
     PermissionsBits,
     PermissionStore,
     React,
@@ -120,17 +121,25 @@ interface ManaSearchBarProps extends Pick<
 export const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 
 export function FilePicker() {
-    const favs = useFavourites(CustomItemFormat.ATTACHMENT);
+    const query = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
+    const favs = useFavourites(CustomItemFormat.ATTACHMENT, query);
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
     const [rowHeights, handleResize] = useListScroller(count);
-
-    const query = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
 
     const renderRow = (row: number) => {
         const item = favs?.[row];
         if (!item) return null;
 
-        return <FilePickerItem key={item.url} url={item.url} file={item.data} row={row} onResize={handleResize} />;
+        return (
+            <FilePickerItem
+                key={item.url}
+                url={item.url}
+                file={item.data}
+                row={row}
+                reducePadding={row !== count - 1}
+                onResize={handleResize}
+            />
+        );
     };
 
     return (
@@ -180,7 +189,7 @@ const demoAttachment: MessageAttachment = {
 function Demo() {
     return (
         <>
-            <div className={cl("attachment-container", "demo")}>
+            <div className={cl("attachment-container", "demo", "first")}>
                 <AttachmentPreview attachment={demoAttachment} />
                 <FavoriteButton
                     className={cl("demo-favourite-button")}
@@ -204,10 +213,11 @@ interface FilePickerItemProps {
     row: number;
     url: string;
     file: MessageAttachment;
+    reducePadding?: boolean;
     onResize: (row: number, height: number) => void;
 }
 
-export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
+export function FilePickerItem({ row, file, onResize, reducePadding }: FilePickerItemProps) {
     const channelId = ExpressionPickerStore.useExpressionPickerStore(store => store.activeChannelId as string);
     const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
 
@@ -225,7 +235,8 @@ export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
                 url: AttachmentUrlsStore.get(file.url),
                 proxy_url: AttachmentUrlsStore.get(file.proxy_url)
             }) as MessageAttachment,
-        [file]
+        [file],
+        lodash.isEqual
     );
 
     const { canAttachFiles, canSendMessages } = useStateFromStores(
@@ -260,7 +271,7 @@ export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
     }, [attachment, canAttachFiles, canSendMessages]);
 
     return (
-        <div ref={ref} className={cl("attachment-container", row === 0 && "first")}>
+        <div ref={ref} className={cl("attachment-container", reducePadding && "reduced-padding")}>
             <AttachmentPreview attachment={attachment} />
             {handleClick && (
                 <Button onClick={handleClick} variant="secondary" disabled={isFetching}>

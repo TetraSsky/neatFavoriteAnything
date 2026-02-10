@@ -15,6 +15,7 @@ import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
 import { AttachmentAccessory, EmbedAccessory, EmbedComponent, FilePicker } from "./components";
+import { AttachmentUrlsStore } from "./stores";
 import {
     AttachmentItem,
     ExpressionPickerTabProps,
@@ -67,7 +68,7 @@ export default definePlugin({
             find: "#{intl::EXPRESSION_PICKER_CATEGORIES_A11Y_LABEL}",
             replacement: [
                 {
-                    match: /\(0,\i\.jsx\)\((\i),.{20,40}"aria-selected":(\i).{50,100}#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
+                    match: /\(0,\i\.jsx\)\((\i),.{20,40}?"aria-selected":(\i).{50,100}?#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
                     replace: "$self.renderTabs($1,$2)"
                 },
                 {
@@ -86,8 +87,8 @@ export default definePlugin({
         {
             find: "#{intl::GIF_TOOLTIP_REMOVE_FROM_FAVORITES}",
             replacement: {
-                match: /\(0,(\i\.\i)\)\((\{[^}].{40,60}\})\)/,
-                replace: "$self.getThumbnail($2).then($1)"
+                match: /\(0,(\i\.\i)\)\((\{[^}].{40,60}?\})\)/,
+                replace: "$self.interceptAddToFavourites($2).then($1)"
             }
         }
     ],
@@ -129,14 +130,21 @@ export default definePlugin({
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,
     filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE,
-    getThumbnail: async (item: FavouriteItem) => {
-        if (item.format !== FavouriteItemFormat.NONE || URL.canParse(item.src)) return item;
+    interceptAddToFavourites: async (item: FavouriteItem & { url: string }) => {
+        if (item.format !== FavouriteItemFormat.NONE) return item;
 
-        const url = await getThumbnailUrl(item.src);
-        if (!url) return item;
+        AttachmentUrlsStore.add(item.url);
 
-        url.search = "";
-        url.hash = item.src;
-        return { ...item, src: `${url}` };
+        if (URL.canParse(item.src)) {
+            AttachmentUrlsStore.add(item.src);
+            return item;
+        }
+
+        const thumbnail = await getThumbnailUrl(item.src);
+        if (!thumbnail) return item;
+
+        thumbnail.search = "";
+        thumbnail.hash = item.src;
+        return { ...item, src: `${thumbnail}` };
     }
 });

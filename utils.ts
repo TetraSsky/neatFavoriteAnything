@@ -13,7 +13,6 @@ import { DraftType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import {
     Constants,
-    ExpressionPickerStore,
     RestAPI,
     UploadHandler,
     useCallback,
@@ -163,14 +162,13 @@ function normalize(str: string) {
     return str.normalize("NFKC").toLowerCase().trim();
 }
 
-export function useFavourites(itemFormat: CustomItemFormat) {
+export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string) {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
-    const searchQuery = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
 
     const { state } = useStateFromStores(
         [UserSettingsProtoStore],
         () => {
-            const query = normalize(searchQuery);
+            const query = searchQuery && normalize(searchQuery);
             const items: Record<string, FavouriteItem> | null =
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
             if (!items) return { query, state: null };

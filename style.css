@@ -3,8 +3,8 @@
     display: flex;
     gap: 12px;
 
-    &:not(.vc-favouriteAnything-first) {
-        padding-top: 0;
+    &.vc-favouriteAnything-reduced-padding {
+        padding-bottom: 0;
     }
 
     > :first-child {
@@ -83,6 +83,7 @@
 .vc-favouriteAnything-info-text {
     text-align: center;
     line-height: 1.6;
+    font-size: 1.1rem;
 }
 
 .vc-favouriteAnything-demo {

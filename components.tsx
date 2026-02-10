@@ -7,7 +7,6 @@
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { sendMessage } from "@utils/discord";
-import { IconComponent } from "@utils/types";
 import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import {
@@ -35,7 +34,7 @@ import {
 import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, ComponentType, ReactNode } from "react";
 
 import { AttachmentContext, EmbedContext } from ".";
-import { AttachmentUrlsStore } from "./stores";
+import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
 import { cl, defs, ImageUtils, reuploadAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
@@ -53,9 +52,7 @@ interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
 
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
 
-const SendIcon = findComponentByCodeLazy(
-    "M6.6 10.02 14 11.4a.6.6 0 0 1 0 1.18L6.6 14l-2.94 5.87a1.48 1.48 0 0 0 1.99 1.98l17.03-8.52a1.48 1.48 0 0 0 0-2.64L5.65 2.16a1.48 1.48 0 0 0-1.99 1.98l2.94 5.88Z"
-) as IconComponent;
+const SendIcon = findComponentByCodeLazy("M6.6 10.02 14 11.4a.6.6");
 
 // Partial type, renderAttachments only uses a few props
 interface MessageComponentProps {
@@ -228,16 +225,11 @@ export function FilePickerItem({ row, file, onResize, reducePadding }: FilePicke
     useEffect(() => void (height && onResize(row, height)), [row, height]);
 
     const attachment = useStateFromStores(
-        [AttachmentUrlsStore],
-        () =>
-            ({
-                ...file,
-                url: AttachmentUrlsStore.get(file.url),
-                proxy_url: AttachmentUrlsStore.get(file.proxy_url)
-            }) as MessageAttachment,
+        [SignedUrlsStore],
+        () => ({ ...file, url: SignedUrlsStore.get(file.url), proxy_url: SignedUrlsStore.get(file.proxy_url) }),
         [file],
         lodash.isEqual
-    );
+    ) as MessageAttachment;
 
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],

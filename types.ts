@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { EmbedJSON, FluxEvents, MessageAttachment } from "@vencord/discord-types";
+import { EmbedJSON, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
 
 declare global {
@@ -103,9 +103,3 @@ export interface FileUploadOptions {
     isThumbnail?: boolean;
     origin?: string;
 }
-
-export type FluxEventHandlers<T extends Partial<Record<FluxEvents, unknown>>> = {
-    [K in keyof T]?: (data: T[K]) => void;
-} & {
-    [K in FluxEvents]?: (data: T[K]) => void;
-};

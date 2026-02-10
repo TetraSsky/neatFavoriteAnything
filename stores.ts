@@ -10,13 +10,21 @@ import { Constants, Flux, FluxDispatcher, RestAPI } from "@webpack/common";
 import { RefreshedUrlsResponse } from "./types";
 import { BatchedRequestQueue } from "./utils";
 
-export const AttachmentUrlsStore = proxyLazyWebpack(() => {
+export const SignedUrlsStore = proxyLazyWebpack(() => {
     interface Store {
         get(url: string): string | null;
         add(url: string): void;
     }
 
-    class AttachmentUrlsStore extends Flux.Store implements Store {
+    class SignedUrlsStore extends Flux.Store implements Store {
+        private readonly _allowedHosts = new Set([
+            window.GLOBAL_ENV.CDN_HOST,
+            ...[window.GLOBAL_ENV.IMAGE_PROXY_ENDPOINTS, window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT]
+                .flatMap(endpoint => endpoint.split(","))
+                .map(endpoint => URL.parse(endpoint)?.host)
+                .filter(Boolean)
+        ]);
+
         private _urls = new Map<string, string>();
         private _queue = new BatchedRequestQueue<string>(batch => this._handleBatch(batch), {
             maxCount: 50,
@@ -28,16 +36,22 @@ export const AttachmentUrlsStore = proxyLazyWebpack(() => {
         }
 
         public get(url: string): string | null {
-            return this._urls.get(url) ?? (this._queue.add(url), null);
+            const value = this._urls.get(url);
+            if (value) return value;
+
+            const parsed = URL.parse(url);
+            if (parsed && this._allowedHosts.has(parsed.host)) this._queue.add(url);
+
+            return null;
         }
 
         public add(url: string) {
-            const stripped = URL.parse(url);
-            if (!stripped) return;
+            const parsed = URL.parse(url);
+            if (!parsed || !this._allowedHosts.has(parsed.host)) return;
 
-            stripped.search = "";
+            parsed.search = "";
 
-            this._update([[`${stripped}`, url]]);
+            this._update([[`${parsed}`, url]]);
         }
 
         private _update(urls: [string, string][]) {
@@ -64,5 +78,5 @@ export const AttachmentUrlsStore = proxyLazyWebpack(() => {
         }
     }
 
-    return new AttachmentUrlsStore(FluxDispatcher) as Store;
+    return new SignedUrlsStore(FluxDispatcher) as Store;
 });

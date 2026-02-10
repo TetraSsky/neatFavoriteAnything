@@ -88,8 +88,8 @@ export const defs = defineItems({
             id: `${id}`,
             filename: `${filename}`,
             size: +size! || 0,
-            url: `${new URL(path!, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
-            proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
+            url: `${new URL(path, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
+            proxy_url: `${new URL(path, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
             content_type: `${content_type}`,
             spoiler: false
         }),
@@ -98,8 +98,9 @@ export const defs = defineItems({
 });
 
 // TODO: replace with something nicer looking idk
-const fallbackThumbnail =
-    "https://images-ext-1.discordapp.net/external/S4K7rlM4DWPFINDZKKmlrGGi3ULoMG4R6rcwRlQz8LU/%3Ftext%3Dinvalid/https/placehold.jp/42/444/fff/600x400.png";
+const fallbackThumbnail = new URL(
+    "https://images-ext-1.discordapp.net/external/S4K7rlM4DWPFINDZKKmlrGGi3ULoMG4R6rcwRlQz8LU/%3Ftext%3Dinvalid/https/placehold.jp/42/444/fff/600x400.png"
+);
 
 export async function getThumbnailUrl(data: string): Promise<URL | null> {
     try {
@@ -116,10 +117,10 @@ export async function getThumbnailUrl(data: string): Promise<URL | null> {
             retries: 3
         }).then(({ body }: { body: UnfurledEmbedsResponse }) => {
             const [{ thumbnail } = {}] = body.embeds;
-            return new URL(thumbnail?.proxy_url ?? fallbackThumbnail);
+            return thumbnail?.proxy_url ? new URL(thumbnail.proxy_url) : fallbackThumbnail;
         });
     } catch {
-        return new URL(fallbackThumbnail);
+        return fallbackThumbnail;
     }
 }
 
@@ -158,8 +159,54 @@ export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefO
     return height;
 }
 
+const diacriticsRegex = /[\u0300-\u036f]/g;
 function normalize(str: string) {
-    return str.normalize("NFKC").toLowerCase().trim();
+    return str.normalize("NFD").replace(diacriticsRegex, "").normalize("NFKC").toLowerCase().trim();
+}
+
+// Stolen from favGifSearch
+function fuzzySearch(searchQuery: string, searchString: string) {
+    let searchIndex = 0;
+    let score = 0;
+
+    for (let i = 0; i < searchString.length; i++) {
+        if (searchString[i] === searchQuery[searchIndex]) {
+            score++;
+            searchIndex++;
+        } else {
+            score--;
+        }
+
+        if (searchIndex === searchQuery.length) {
+            return score;
+        }
+    }
+
+    return null;
+}
+
+function filterItems(items: Record<string, FavouriteItem> | null, itemFormat: CustomItemFormat, query?: string) {
+    if (!items) return null;
+
+    const validItems = Object.entries(items)
+        .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
+        .map(([url, { src, ...rest }]) => ({
+            ...rest,
+            ...defs.decode(URL.parse(src)?.hash.replace("#", "") ?? "")!,
+            url
+        }))
+        .filter(({ format, data }) => data && format === itemFormat);
+
+    if (!query) return validItems.sort((a, b) => b.order - a.order);
+
+    return validItems
+        .map(item => ({
+            item,
+            score: fuzzySearch(query, normalize(defs.stringify(item.format, item.data)))
+        }))
+        .filter(({ score }) => score)
+        .sort((a, b) => b.score! - a.score!)
+        .map(({ item }) => item);
 }
 
 export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string) {
@@ -171,22 +218,8 @@ export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string
             const query = searchQuery && normalize(searchQuery);
             const items: Record<string, FavouriteItem> | null =
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
-            if (!items) return { query, state: null };
 
-            const validItems = Object.entries(items)
-                .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
-                .map(([url, { src, ...rest }]) => ({
-                    ...rest,
-                    ...defs.decode(URL.parse(src)?.hash.replace("#", "") ?? "")!,
-                    url
-                }))
-                .filter(({ format, data }) => data && format === itemFormat);
-
-            const filtered = query
-                ? validItems.filter(({ format, data }) => normalize(defs.stringify(format, data)).includes(query))
-                : validItems;
-
-            return { query, state: filtered.sort((a, b) => b.order - a.order) };
+            return { query, state: filterItems(items, itemFormat, query) };
         },
         [searchQuery],
         // Do not rerender components using this hook unless the query has changed or the items were loaded for the first time
@@ -251,8 +284,6 @@ export class BatchedRequestQueue<T> {
     }
 }
 
-interface ImageUtils {
+export const ImageUtils: {
     isAnimated(image: { src: string; original?: string; animated: boolean; srcIsAnimated?: boolean }): boolean;
-}
-
-export const ImageUtils: ImageUtils = findByPropsLazy("isAnimated", "getFormatQuality");
+} = findByPropsLazy("isAnimated", "getFormatQuality");

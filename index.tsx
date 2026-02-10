@@ -15,7 +15,7 @@ import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
 import { AttachmentAccessory, EmbedAccessory, EmbedComponent, FilePicker } from "./components";
-import { AttachmentUrlsStore } from "./stores";
+import { SignedUrlsStore } from "./stores";
 import {
     AttachmentItem,
     ExpressionPickerTabProps,
@@ -58,7 +58,7 @@ export default definePlugin({
             ]
         },
         {
-            find: '"aria-label":B.intl.string(B.t.fSiQ3A)',
+            find: "#{intl::MEDIA_MOSAIC_ALT_TEXT_POPOUT_TITLE}",
             replacement: {
                 match: /renderAdjacentContent:(\i)/g,
                 replace: "$&=$self.renderEmbedAccessory"
@@ -133,10 +133,10 @@ export default definePlugin({
     interceptAddToFavourites: async (item: FavouriteItem & { url: string }) => {
         if (item.format !== FavouriteItemFormat.NONE) return item;
 
-        AttachmentUrlsStore.add(item.url);
+        SignedUrlsStore.add(item.url);
 
         if (URL.canParse(item.src)) {
-            AttachmentUrlsStore.add(item.src);
+            SignedUrlsStore.add(item.src);
             return item;
         }
 

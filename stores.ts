@@ -31,7 +31,7 @@ export const AttachmentUrlsStore = proxyLazyWebpack(() => {
         }
 
         private async _handleBatch(batch: string[]) {
-            return RestAPI.post({
+            await RestAPI.post({
                 url: Constants.Endpoints.ATTACHMENTS_REFRESH_URLS,
                 body: { attachment_urls: batch },
                 retries: 3

@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ChatBarButton } from "@api/ChatButtons";
 import { BaseText } from "@components/BaseText";
+import { getCurrentChannel, sendMessage } from "@utils/discord";
+import { IconComponent } from "@utils/types";
 import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import {
@@ -15,13 +18,26 @@ import {
     findCssClassesLazy,
     proxyLazyWebpack
 } from "@webpack";
-import { ListScrollerThin, React, useEffect, useMemo, useRef, useStateFromStores } from "@webpack/common";
+import {
+    ChannelStore,
+    ComponentDispatch,
+    ListScrollerThin,
+    PermissionsBits,
+    PermissionStore,
+    React,
+    SelectedChannelStore,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useStateFromStores
+} from "@webpack/common";
 import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, ComponentType, ReactNode } from "react";
 
 import { AttachmentContext, EmbedContext } from ".";
 import { AttachmentUrlsStore } from "./stores";
 import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
-import { cl, defs, ImageUtils, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { cl, defs, ImageUtils, reuploadAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
 const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight"> & {
@@ -31,10 +47,15 @@ const ListScroller = ListScrollerThin as ComponentType<
 
 interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
     url: string;
+    gifSrc?: string;
     className?: string;
 }
 
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
+
+const SendIcon = findComponentByCodeLazy(
+    "M6.6 10.02 14 11.4a.6.6 0 0 1 0 1.18L6.6 14l-2.94 5.87a1.48 1.48 0 0 0 1.99 1.98l17.03-8.52a1.48 1.48 0 0 0 0-2.64L5.65 2.16a1.48 1.48 0 0 0-1.99 1.98l2.94 5.88Z"
+) as IconComponent;
 
 // Partial type, renderAttachments only uses a few props
 interface MessageComponentProps {
@@ -53,10 +74,10 @@ export interface MessageComponentClass extends Omit<ComponentClass<MessageCompon
 }
 
 interface AttachmentsComponentProps {
-    attachments: MessageAttachment[];
+    attachment: MessageAttachment;
 }
 
-export const Attachments = proxyLazyWebpack(() => {
+export const AttachmentPreview = proxyLazyWebpack(() => {
     const MessageComponent = findComponentByCode("this.renderAttachments") as MessageComponentClass;
 
     const DmChannel: Channel & { new (base?: Partial<Channel>): Channel } = findByProps("fromServer", "sortRecipients");
@@ -70,8 +91,11 @@ export const Attachments = proxyLazyWebpack(() => {
 
     const channel = Object.freeze(new DmChannel({ id: "0", type: ChannelType.GUILD_TEXT }));
 
-    return function Attachments({ attachments }: AttachmentsComponentProps) {
-        const message = useMemo(() => new MessageClass({ attachments, channel_id: channel.id }), [attachments]);
+    return function AttachmentPreview({ attachment }: AttachmentsComponentProps) {
+        const message = useMemo(
+            () => new MessageClass({ attachments: [attachment], channel_id: channel.id }),
+            [attachment]
+        );
 
         return (
             <MessageAttachmentsComponent
@@ -101,20 +125,11 @@ export function FilePicker() {
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
     const [rowHeights, handleResize] = useListScroller(count);
 
-    const renderRow = (section: number, row: number) => {
-        switch (section) {
-            case 0: {
-                const item = favs?.[row];
-                if (!item) return null;
+    const renderRow = (row: number) => {
+        const item = favs?.[row];
+        if (!item) return null;
 
-                return (
-                    <FilePickerItem key={item.url} url={item.url} file={item.data} row={row} onResize={handleResize} />
-                );
-            }
-            case 1: {
-                return <div className={cl("scroller-footer")} />;
-            }
-        }
+        return <FilePickerItem key={item.url} url={item.url} file={item.data} row={row} onResize={handleResize} />;
     };
 
     return (
@@ -131,11 +146,11 @@ export function FilePicker() {
             {count > 0 ? (
                 <div className={cl("container-body")}>
                     <ListScroller
-                        sections={[count, 1]}
+                        sections={[count]}
                         sectionHeight={0}
-                        rowHeight={(section, row) => (section === 1 ? 12 : (rowHeights.current[row] ?? 100))}
+                        rowHeight={(_, row) => rowHeights.current[row] ?? 100}
                         renderSection={() => null}
-                        renderRow={({ section, row }) => renderRow(section, row)}
+                        renderRow={({ row }) => renderRow(row)}
                     />
                 </div>
             ) : (
@@ -165,7 +180,7 @@ function Demo() {
     return (
         <>
             <div className={cl("attachment-container", "demo")}>
-                <Attachments attachments={[demoAttachment]} />
+                <AttachmentPreview attachment={demoAttachment} />
                 <FavoriteButton
                     className={cl("demo-favourite-button")}
                     url="https://example.org"
@@ -192,27 +207,59 @@ interface FilePickerItemProps {
 }
 
 export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
-    // TODO: Add send/upload button
     const ref = useRef<HTMLDivElement>(null);
     const height = useResizeObserver(ref);
     useEffect(() => void (height && onResize(row, height)), [row, height]);
 
-    const attachments = useStateFromStores(
+    const attachment = useStateFromStores(
         [AttachmentUrlsStore],
-        () => {
-            const attachment = {
+        () =>
+            ({
                 ...file,
                 url: AttachmentUrlsStore.get(file.url),
                 proxy_url: AttachmentUrlsStore.get(file.proxy_url)
-            };
-            return [attachment as MessageAttachment];
-        },
+            }) as MessageAttachment,
         [file]
     );
 
+    const currentChannel = useStateFromStores([SelectedChannelStore, ChannelStore], getCurrentChannel, []);
+    const { canAttachFiles, canSendMessages } = useStateFromStores(
+        [PermissionStore],
+        () => {
+            if (!currentChannel || currentChannel.isPrivate()) return {};
+            return {
+                canAttachFiles: PermissionStore.can(PermissionsBits.ATTACH_FILES, currentChannel),
+                canSendMessages: PermissionStore.can(PermissionsBits.SEND_MESSAGES, currentChannel)
+            };
+        },
+        [currentChannel]
+    );
+
+    const send = useMemo(() => {
+        switch (true) {
+            case canAttachFiles:
+                return () => reuploadAttachment(attachment, currentChannel!, { requireConfirm: false });
+            case canSendMessages:
+                return () => sendMessage(currentChannel!.id, { content: attachment.url });
+            default:
+                return null;
+        }
+    }, [attachment, canAttachFiles, canSendMessages]);
+
+    const handleClick = useCallback(async () => {
+        await send!();
+        // TODO: Find out why tf this doesn't work
+        ComponentDispatch.dispatchToLastSubscribed("TOGGLE_GIF_PICKER");
+    }, [send]);
+
     return (
-        <div ref={ref} className={cl("attachment-container")}>
-            <Attachments attachments={attachments} />
+        <div ref={ref} className={cl("attachment-container", row === 0 && "first")}>
+            <AttachmentPreview attachment={attachment} />
+            {send && (
+                <ChatBarButton onClick={handleClick} tooltip={canAttachFiles ? "Send as attachment" : "Send as link"}>
+                    <SendIcon size="refresh_sm" color="currentColor" />
+                </ChatBarButton>
+            )}
         </div>
     );
 }

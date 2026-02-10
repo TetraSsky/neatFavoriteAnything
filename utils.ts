@@ -7,11 +7,14 @@
 import { classNameFactory } from "@utils/css";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
-import { MessageAttachment } from "@vencord/discord-types";
+import { PluginNative } from "@utils/types";
+import { Channel, MessageAttachment } from "@vencord/discord-types";
+import { DraftType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import {
     Constants,
     RestAPI,
+    UploadHandler,
     useCallback,
     useEffect,
     useRef,
@@ -28,6 +31,7 @@ import {
     CustomItemFormat,
     FavouriteItem,
     FavouriteItemFormat,
+    FileUploadOptions,
     ItemsDef,
     UnfurledEmbedsResponse
 } from "./types";
@@ -117,6 +121,22 @@ export async function getThumbnailUrl(data: string): Promise<URL | null> {
     } catch {
         return new URL(fallbackThumbnail);
     }
+}
+
+const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
+
+const promptToUpload = UploadHandler.promptToUpload as (
+    files: File[],
+    channel: Channel,
+    draftType: DraftType,
+    options?: FileUploadOptions
+) => void | Promise<void>;
+
+export async function reuploadAttachment(attachment: MessageAttachment, channel: Channel, options?: FileUploadOptions) {
+    return await Native.fetchAttachment(attachment)
+        .then(({ data, filename, type }) => new File([data], filename, { type }))
+        .then(file => promptToUpload([file], channel, DraftType.ChannelMessage, options))
+        .catch(console.error);
 }
 
 export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {

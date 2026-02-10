@@ -97,6 +97,13 @@ export interface UnfurledEmbedsResponse {
     embeds: EmbedJSON[];
 }
 
+export interface FileUploadOptions {
+    filesMetadata?: unknown[];
+    requireConfirm?: boolean;
+    isThumbnail?: boolean;
+    origin?: string;
+}
+
 export type FluxEventHandlers<T extends Partial<Record<FluxEvents, unknown>>> = {
     [K in keyof T]?: (data: T[K]) => void;
 } & {

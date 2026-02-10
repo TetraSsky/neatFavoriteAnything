@@ -13,6 +13,7 @@ import { DraftType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import {
     Constants,
+    ExpressionPickerStore,
     RestAPI,
     UploadHandler,
     useCallback,
@@ -135,8 +136,8 @@ const promptToUpload = UploadHandler.promptToUpload as (
 export async function reuploadAttachment(attachment: MessageAttachment, channel: Channel, options?: FileUploadOptions) {
     return await Native.fetchAttachment(attachment)
         .then(({ data, filename, type }) => new File([data], filename, { type }))
-        .then(file => promptToUpload([file], channel, DraftType.ChannelMessage, options))
-        .catch(console.error);
+        .then(file => ({ upload: promptToUpload([file], channel, DraftType.ChannelMessage, options) }))
+        .catch(() => ({ upload: null }));
 }
 
 export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {
@@ -164,7 +165,7 @@ function normalize(str: string) {
 
 export function useFavourites(itemFormat: CustomItemFormat) {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
-    const [searchQuery, setSearchQuery] = useState("");
+    const searchQuery = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
 
     const { state } = useStateFromStores(
         [UserSettingsProtoStore],
@@ -195,7 +196,7 @@ export function useFavourites(itemFormat: CustomItemFormat) {
         (prev, next) => !!prev.state === !!next.state && prev.query === next.query
     );
 
-    return [state, searchQuery, setSearchQuery] as const;
+    return state;
 }
 
 export function useListScroller(count: number) {

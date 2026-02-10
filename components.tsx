@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ChatBarButton } from "@api/ChatButtons";
 import { BaseText } from "@components/BaseText";
-import { getCurrentChannel, sendMessage } from "@utils/discord";
+import { Button } from "@components/Button";
+import { sendMessage } from "@utils/discord";
 import { IconComponent } from "@utils/types";
 import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
@@ -20,16 +20,15 @@ import {
 } from "@webpack";
 import {
     ChannelStore,
-    ComponentDispatch,
+    ExpressionPickerStore,
     ListScrollerThin,
     PermissionsBits,
     PermissionStore,
     React,
-    SelectedChannelStore,
-    useCallback,
     useEffect,
     useMemo,
     useRef,
+    useState,
     useStateFromStores
 } from "@webpack/common";
 import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, ComponentType, ReactNode } from "react";
@@ -121,9 +120,11 @@ interface ManaSearchBarProps extends Pick<
 export const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 
 export function FilePicker() {
-    const [favs, query, setQuery] = useFavourites(CustomItemFormat.ATTACHMENT);
+    const favs = useFavourites(CustomItemFormat.ATTACHMENT);
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
     const [rowHeights, handleResize] = useListScroller(count);
+
+    const query = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
 
     const renderRow = (row: number) => {
         const item = favs?.[row];
@@ -139,8 +140,8 @@ export function FilePicker() {
                     autoFocus
                     placeholder="Search files"
                     query={query}
-                    onChange={setQuery}
-                    onClear={() => setQuery("")}
+                    onChange={query => ExpressionPickerStore.setSearchQuery(query)}
+                    onClear={() => ExpressionPickerStore.setSearchQuery("")}
                 />
             </div>
             {count > 0 ? (
@@ -207,6 +208,11 @@ interface FilePickerItemProps {
 }
 
 export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
+    const channelId = ExpressionPickerStore.useExpressionPickerStore(store => store.activeChannelId as string);
+    const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
+
+    const [isFetching, setIsFetching] = useState(false);
+
     const ref = useRef<HTMLDivElement>(null);
     const height = useResizeObserver(ref);
     useEffect(() => void (height && onResize(row, height)), [row, height]);
@@ -222,43 +228,44 @@ export function FilePickerItem({ row, file, onResize }: FilePickerItemProps) {
         [file]
     );
 
-    const currentChannel = useStateFromStores([SelectedChannelStore, ChannelStore], getCurrentChannel, []);
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],
         () => {
-            if (!currentChannel || currentChannel.isPrivate()) return {};
+            if (!channel || channel.isPrivate()) return {};
             return {
-                canAttachFiles: PermissionStore.can(PermissionsBits.ATTACH_FILES, currentChannel),
-                canSendMessages: PermissionStore.can(PermissionsBits.SEND_MESSAGES, currentChannel)
+                canAttachFiles: PermissionStore.can(PermissionsBits.ATTACH_FILES, channel),
+                canSendMessages: PermissionStore.can(PermissionsBits.SEND_MESSAGES, channel)
             };
         },
-        [currentChannel]
+        [channel]
     );
 
-    const send = useMemo(() => {
+    const handleClick = useMemo(() => {
         switch (true) {
             case canAttachFiles:
-                return () => reuploadAttachment(attachment, currentChannel!, { requireConfirm: false });
+                return async () => {
+                    setIsFetching(true);
+                    const { upload } = await reuploadAttachment(attachment, channel!, { requireConfirm: false });
+                    setIsFetching(false);
+                    if (upload) ExpressionPickerStore.closeExpressionPicker();
+                };
             case canSendMessages:
-                return () => sendMessage(currentChannel!.id, { content: attachment.url });
+                return () => {
+                    sendMessage(channel!.id, { content: attachment.url });
+                    ExpressionPickerStore.closeExpressionPicker();
+                };
             default:
                 return null;
         }
     }, [attachment, canAttachFiles, canSendMessages]);
 
-    const handleClick = useCallback(async () => {
-        await send!();
-        // TODO: Find out why tf this doesn't work
-        ComponentDispatch.dispatchToLastSubscribed("TOGGLE_GIF_PICKER");
-    }, [send]);
-
     return (
         <div ref={ref} className={cl("attachment-container", row === 0 && "first")}>
             <AttachmentPreview attachment={attachment} />
-            {send && (
-                <ChatBarButton onClick={handleClick} tooltip={canAttachFiles ? "Send as attachment" : "Send as link"}>
+            {handleClick && (
+                <Button onClick={handleClick} variant="secondary" disabled={isFetching}>
                     <SendIcon size="refresh_sm" color="currentColor" />
-                </ChatBarButton>
+                </Button>
             )}
         </div>
     );

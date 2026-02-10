@@ -21,10 +21,9 @@
         }
     }
 
-    .vc-chatbar-button > [role="button"] {
-        width: 3rem;
-        height: 100%;
-        flex: 1;
+    > button {
+        width: 15%;
+        min-width: 54px;
     }
 }
 

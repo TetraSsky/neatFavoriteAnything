@@ -97,10 +97,3 @@ export interface RefreshedUrlsResponse {
 export interface UnfurledEmbedsResponse {
     embeds: EmbedJSON[];
 }
-
-export interface FileUploadOptions {
-    filesMetadata?: unknown[];
-    requireConfirm?: boolean;
-    isThumbnail?: boolean;
-    origin?: string;
-}

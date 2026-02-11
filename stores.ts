@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { proxyLazyWebpack } from "@webpack";
+import { FluxStore } from "@vencord/discord-types";
+import { findStoreLazy, proxyLazyWebpack } from "@webpack";
 import { Constants, Flux, FluxDispatcher, RestAPI } from "@webpack/common";
 
 import { RefreshedUrlsResponse } from "./types";
@@ -103,3 +104,9 @@ export const SignedUrlsStore = proxyLazyWebpack(() => {
 
     return new SignedUrlsStore(FluxDispatcher) as Store;
 });
+
+interface PendingReplyStore extends FluxStore {
+    getPendingReply: (channelId: string) => unknown;
+}
+
+export const PendingReplyStore: PendingReplyStore = findStoreLazy("PendingReplyStore");

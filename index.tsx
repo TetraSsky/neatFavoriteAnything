@@ -76,13 +76,13 @@ export default definePlugin({
             replacement: [
                 {
                     // Replace the "GIFs" tab with two custom tabs
-                    match: /\(0,\i\.jsx\)\((\i),.{20,40}?"aria-selected":(\i).{50,100}?#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
+                    match: /\(0,\i\.jsx\)\((\i),[^}]{20,40}?"aria-selected":(\i)[^}]{50,100}?#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
                     replace: "$self.renderTabs($1,$2)"
                 },
                 {
                     // Insert the custom file picker into the expression picker's body
-                    match: /(?<=null,)(\i)===\i\.\i\.EMOJI/,
-                    replace: "$self.renderFilePicker($1),$&"
+                    match: /\{onSelectGIF:(\i),[^}]{20,40}\}\):null,(?=(\i)===)/,
+                    replace: "$&$self.renderFilePicker($2,$1),"
                 }
             ]
         },
@@ -130,8 +130,8 @@ export default definePlugin({
             </>
         );
     },
-    renderFilePicker(activeView: ExpressionPickerView) {
-        return activeView === ExpressionPickerView.FILES ? <FilePicker /> : null;
+    renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string }) => void) {
+        return activeView === ExpressionPickerView.FILES ? <FilePicker onSelectItem={onSelectGIF} /> : null;
     },
     renderAttachment(children: ReactNode, props: { item: AttachmentItem }) {
         return <AttachmentContext.Provider value={props.item}>{children}</AttachmentContext.Provider>;

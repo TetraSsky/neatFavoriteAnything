@@ -5,16 +5,22 @@
  */
 
 import { classNameFactory } from "@utils/css";
+import { sendMessage } from "@utils/discord";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
-import { DraftType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import {
     Constants,
+    DraftType,
+    FluxDispatcher,
+    MessageActions,
     RestAPI,
+    Toasts,
+    UploadAttachmentStore,
     UploadHandler,
+    UploadManager,
     useCallback,
     useEffect,
     useRef,
@@ -27,12 +33,12 @@ import { deflateSync, inflateSync } from "fflate";
 import { Key, RefObject } from "react";
 import { JsonValue } from "type-fest";
 
+import { PendingReplyStore } from "./stores";
 import {
     CustomItemDef,
     CustomItemFormat,
     FavouriteItem,
     FavouriteItemFormat,
-    FileUploadOptions,
     ItemsDef,
     UnfurledEmbedsResponse
 } from "./types";
@@ -131,18 +137,44 @@ export async function getThumbnailUrl(data: string, width: number, height: numbe
 }
 
 const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
-
 const promptToUpload = UploadHandler.promptToUpload as unknown as (
-    files: File[],
-    channel: Channel,
-    draftType: DraftType,
-    options?: FileUploadOptions
+    ...args: Parameters<typeof UploadHandler.promptToUpload>
 ) => Promise<void>;
 
-export async function reuploadAttachment(attachment: MessageAttachment, channel: Channel, options?: FileUploadOptions) {
-    return await Native.fetchAttachment(attachment)
+export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
+    const file = await Native.fetchAttachment(attachment)
         .then(({ data, filename, type }) => new File([data], filename, { type }))
-        .then(file => ({ upload: promptToUpload([file], channel, DraftType.ChannelMessage, options) }));
+        .catch(() =>
+            Toasts.show({
+                message: `Couldn't fetch ${attachment.filename}`,
+                id: Toasts.genId(),
+                type: Toasts.Type.FAILURE
+            })
+        );
+    if (!file) return;
+
+    // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
+    await promptToUpload([file], channel, DraftType.ChannelMessage).catch(() =>
+        Toasts.show({
+            message: `Couldn't upload ${attachment.filename}`,
+            id: Toasts.genId(),
+            type: Toasts.Type.FAILURE
+        })
+    );
+
+    const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
+    const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
+    if (uploadIdx === -1) return;
+
+    const reply = PendingReplyStore.getPendingReply(channel.id);
+    const [upload] = uploads.splice(uploadIdx);
+    UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
+    FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });
+
+    void sendMessage(channel.id, {}, false, {
+        ...MessageActions.getSendMessageOptionsForReply(reply),
+        attachmentsToUpload: [upload]
+    });
 }
 
 export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {

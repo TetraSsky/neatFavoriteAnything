@@ -6,7 +6,6 @@
 
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
-import { sendMessage } from "@utils/discord";
 import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import {
@@ -25,7 +24,7 @@ import {
     PermissionsBits,
     PermissionStore,
     React,
-    Toasts,
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -46,7 +45,7 @@ import {
 import { AttachmentContext, EmbedContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
-import { cl, defs, ImageUtils, reuploadAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { cl, defs, ImageUtils, sendAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
 type ListScrollerRef = { scrollToTop: () => void };
 const ListScroller = ListScrollerThin as ComponentType<
@@ -129,7 +128,11 @@ interface ManaSearchBarProps extends Pick<
 
 export const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 
-export function FilePicker() {
+interface FilePickerProps {
+    onSelectItem: (item: { url: string }) => void;
+}
+
+export function FilePicker({ onSelectItem }: FilePickerProps) {
     const listRef = useRef<ListScrollerRef>(null);
 
     const { channelId, query } = ExpressionPickerStore.useExpressionPickerStore(store => ({
@@ -144,6 +147,8 @@ export function FilePicker() {
 
     const [rowHeights, handleResize] = useListScroller();
 
+    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), []);
+
     const renderRow = (row: number) => {
         const item = favs?.[row];
         if (!item) return null;
@@ -156,6 +161,7 @@ export function FilePicker() {
                 channel={channel}
                 reducePadding={row !== count - 1}
                 onResize={handleResize}
+                onSubmit={handleSubmit}
             />
         );
     };
@@ -236,9 +242,10 @@ interface FilePickerItemProps {
     channel: Channel | null;
     reducePadding?: boolean;
     onResize: (key: Key, height: number) => void;
+    onSubmit: (url: string) => void;
 }
 
-export function FilePickerItem({ url, file, channel, onResize, reducePadding }: FilePickerItemProps) {
+export function FilePickerItem({ url, file, channel, onResize, onSubmit, reducePadding }: FilePickerItemProps) {
     const [isFetching, setIsFetching] = useState(false);
 
     const ref = useRef<HTMLDivElement>(null);
@@ -269,26 +276,16 @@ export function FilePickerItem({ url, file, channel, onResize, reducePadding }: 
             case canAttachFiles:
                 return async () => {
                     setIsFetching(true);
-                    await reuploadAttachment(attachment, channel!, { requireConfirm: false })
-                        .then(() => ExpressionPickerStore.closeExpressionPicker())
-                        .catch(() =>
-                            Toasts.show({
-                                message: `Couldn't fetch ${attachment.filename}`,
-                                id: Toasts.genId(),
-                                type: Toasts.Type.FAILURE
-                            })
-                        );
+                    await sendAttachment(attachment, channel!);
+                    ExpressionPickerStore.closeExpressionPicker();
                     setIsFetching(false);
                 };
             case canSendMessages:
-                return () => {
-                    sendMessage(channel!.id, { content: attachment.url });
-                    ExpressionPickerStore.closeExpressionPicker();
-                };
+                return () => onSubmit(url);
             default:
                 return null;
         }
-    }, [attachment, canAttachFiles, canSendMessages]);
+    }, [attachment, canAttachFiles, canSendMessages, channel, url]);
 
     return (
         <div ref={ref} className={cl("attachment-container", reducePadding && "reduced-padding")}>

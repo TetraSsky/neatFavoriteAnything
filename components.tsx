@@ -25,22 +25,34 @@ import {
     PermissionsBits,
     PermissionStore,
     React,
+    Toasts,
     useEffect,
     useMemo,
     useRef,
     useState,
     useStateFromStores
 } from "@webpack/common";
-import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, ComponentType, ReactNode } from "react";
+import {
+    Component,
+    ComponentClass,
+    ComponentProps,
+    ComponentPropsWithRef,
+    ComponentType,
+    Key,
+    ReactNode,
+    Ref
+} from "react";
 
 import { AttachmentContext, EmbedContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
 import { cl, defs, ImageUtils, reuploadAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
+type ListScrollerRef = { scrollToTop: () => void };
 const ListScroller = ListScrollerThin as ComponentType<
-    Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight"> & {
+    Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight" | "ref"> & {
         rowHeight?: number | ((section: number, row: number) => number);
+        ref?: Ref<ListScrollerRef>;
     }
 >;
 
@@ -118,10 +130,19 @@ interface ManaSearchBarProps extends Pick<
 export const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 
 export function FilePicker() {
-    const query = ExpressionPickerStore.useExpressionPickerStore(store => store.searchQuery);
+    const listRef = useRef<ListScrollerRef>(null);
+
+    const { channelId, query } = ExpressionPickerStore.useExpressionPickerStore(store => ({
+        channelId: store.activeChannelId as string,
+        query: store.searchQuery
+    }));
+
+    const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
+
     const favs = useFavourites(CustomItemFormat.ATTACHMENT, query);
     const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
-    const [rowHeights, handleResize] = useListScroller(count);
+
+    const [rowHeights, handleResize] = useListScroller();
 
     const renderRow = (row: number) => {
         const item = favs?.[row];
@@ -132,12 +153,14 @@ export function FilePicker() {
                 key={item.url}
                 url={item.url}
                 file={item.data}
-                row={row}
+                channel={channel}
                 reducePadding={row !== count - 1}
                 onResize={handleResize}
             />
         );
     };
+
+    useEffect(() => void listRef.current?.scrollToTop(), [query]);
 
     return (
         <div id="files-picker-tab-panel" role="tabpanel" aria-labelledby="files-picker-tab" className={cl("container")}>
@@ -153,9 +176,10 @@ export function FilePicker() {
             {count > 0 ? (
                 <div className={cl("container-body")}>
                     <ListScroller
+                        ref={listRef}
                         sections={[count]}
                         sectionHeight={0}
-                        rowHeight={(_, row) => rowHeights.current[row] ?? 100}
+                        rowHeight={(_, row) => (favs?.[row] && rowHeights.get(favs[row].url)) ?? 100}
                         renderSection={() => null}
                         renderRow={({ row }) => renderRow(row)}
                     />
@@ -207,22 +231,19 @@ function Demo() {
 }
 
 interface FilePickerItemProps {
-    row: number;
     url: string;
     file: MessageAttachment;
+    channel: Channel | null;
     reducePadding?: boolean;
-    onResize: (row: number, height: number) => void;
+    onResize: (key: Key, height: number) => void;
 }
 
-export function FilePickerItem({ row, file, onResize, reducePadding }: FilePickerItemProps) {
-    const channelId = ExpressionPickerStore.useExpressionPickerStore(store => store.activeChannelId as string);
-    const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
-
+export function FilePickerItem({ url, file, channel, onResize, reducePadding }: FilePickerItemProps) {
     const [isFetching, setIsFetching] = useState(false);
 
     const ref = useRef<HTMLDivElement>(null);
     const height = useResizeObserver(ref);
-    useEffect(() => void (height && onResize(row, height)), [row, height]);
+    useEffect(() => void (height && onResize(url, height)), [url, height]);
 
     const attachment = useStateFromStores(
         [SignedUrlsStore],
@@ -248,9 +269,16 @@ export function FilePickerItem({ row, file, onResize, reducePadding }: FilePicke
             case canAttachFiles:
                 return async () => {
                     setIsFetching(true);
-                    const { upload } = await reuploadAttachment(attachment, channel!, { requireConfirm: false });
+                    await reuploadAttachment(attachment, channel!, { requireConfirm: false })
+                        .then(() => ExpressionPickerStore.closeExpressionPicker())
+                        .catch(() =>
+                            Toasts.show({
+                                message: `Couldn't fetch ${attachment.filename}`,
+                                id: Toasts.genId(),
+                                type: Toasts.Type.FAILURE
+                            })
+                        );
                     setIsFetching(false);
-                    if (upload) ExpressionPickerStore.closeExpressionPicker();
                 };
             case canSendMessages:
                 return () => {
@@ -286,11 +314,17 @@ export function EmbedAccessory() {
         const content = video ?? image;
         if (!content) return null;
 
+        // This field is missing on videos by third party providers (TikTok, YouTube ...)
         const isProxiedVideo = !!video?.proxyURL;
+
+        // External videos don't have a video.proxyURL property that could be used for the preview - use the static thumbnail instead
         const src = content?.proxyURL ?? thumbnail?.proxyURL ?? content.url;
-        const url = !video || isProxiedVideo ? content?.url : embed.url!;
         const format = isProxiedVideo ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE;
 
+        // External videos' content.url usually doesn't point to a valid resource that could be embedded
+        const url = video && !isProxiedVideo ? embed.url! : content?.url;
+
+        // Do not render the custom embed accessory if the original image already has a gif accessory
         const isAnimated = ImageUtils.isAnimated({ original: url, src, animated: type === "gifv" });
         if (isAnimated) return null;
 
@@ -306,18 +340,20 @@ export function EmbedAccessory() {
     );
 }
 
-const itemFormats: Partial<Record<AttachmentItem["type"], FavouriteItemFormat>> = Object.freeze({
+const visualMediaFormats: Partial<Record<AttachmentItem["type"], FavouriteItemFormat>> = Object.freeze({
     IMAGE: FavouriteItemFormat.IMAGE,
-    VIDEO: FavouriteItemFormat.VIDEO
+    VIDEO: FavouriteItemFormat.VIDEO,
+    CLIP: FavouriteItemFormat.VIDEO
 });
 
 export function AttachmentAccessory() {
     const attachment = React.useContext(AttachmentContext);
 
     const props: FavoriteButtonProps | null = useMemo(() => {
-        if (!attachment) return null;
+        if (!attachment?.downloadUrl) return null;
         const { originalItem, type, downloadUrl, width = 600, height = 400, srcIsAnimated } = attachment;
 
+        // Do not render the custom accessory if the original attachment component already has a gif accessory
         const isAnimated = ImageUtils.isAnimated({
             original: originalItem.url,
             src: originalItem.proxy_url,
@@ -326,15 +362,17 @@ export function AttachmentAccessory() {
         });
         if (isAnimated) return null;
 
-        const isVisualMedia = type === "IMAGE" || type === "VIDEO" || type === "CLIP";
-        const src = isVisualMedia
-            ? originalItem.proxy_url
-            : defs.encode(CustomItemFormat.ATTACHMENT, originalItem)?.toString();
+        if (type in visualMediaFormats) {
+            return { format: visualMediaFormats[type]!, src: originalItem.proxy_url, url: downloadUrl, width, height };
+        }
+
+        // Non visual attachments have to be encoded to store metadata in the src property.
+        // Note that this isn't a valid url yet, the full url (with a fallback image for vanilla client compat)
+        // is generated via `getThumbnailUrl` once the user clicks the favourite button
+        const src = defs.encode(CustomItemFormat.ATTACHMENT, originalItem)?.toString();
         if (!src) return null;
 
-        const format = (type && itemFormats[type]) || FavouriteItemFormat.NONE;
-
-        return { format, src, url: downloadUrl, width, height };
+        return { format: FavouriteItemFormat.NONE, src, url: downloadUrl, width, height };
     }, [attachment]);
 
     return props && <FavoriteButton {...props} className={cl("attachment-accessory")} />;

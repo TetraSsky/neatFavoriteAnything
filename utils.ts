@@ -24,7 +24,8 @@ import {
     useStateFromStores
 } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
-import { RefObject } from "react";
+import { Key, RefObject } from "react";
+import { JsonValue } from "type-fest";
 
 import {
     CustomItemDef,
@@ -38,7 +39,7 @@ import {
 
 export const cl = classNameFactory("vc-favouriteAnything-");
 
-const defineItem = <const A, const B>(item: CustomItemDef<A, B>) => item;
+const defineItem = <const A, const B extends JsonValue>(item: CustomItemDef<A, B>) => item;
 function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: ItemsDef<T>) {
     type Type<F extends CustomItemFormat> = T[F] extends CustomItemDef<infer A> ? A : never;
 
@@ -61,7 +62,7 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
                 const parsed: unknown[] | null = JSON.parse(new TextDecoder().decode(buf));
                 if (!Array.isArray(parsed)) return null;
 
-                const [format, data] = parsed as [keyof typeof def, unknown];
+                const [format, data] = parsed as [keyof typeof def, JsonValue];
                 if (!(format in def)) return null;
 
                 return { format, data: def[format].decode(data) } as {
@@ -75,6 +76,10 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
     };
 }
 
+// Encode/Decode definitions for custom favourite items.
+// The encode callback must return a json compatible object, preferably as compact as possible.
+// Decode must recreate the original object based on the encoded value.
+// Stringify returns a simple string representation used for thumbnail text and expression picker search.
 export const defs = defineItems({
     [CustomItemFormat.ATTACHMENT]: defineItem({
         encode: ({ id, filename, size, url, content_type = "" }: MessageAttachment) => [
@@ -95,6 +100,7 @@ export const defs = defineItems({
         }),
         stringify: ({ filename }) => filename
     })
+    // This could be expanded in the future with other item types (e.g. voice messages)
 });
 
 // TODO: replace with something nicer looking idk
@@ -102,13 +108,13 @@ const fallbackThumbnail = new URL(
     "https://images-ext-1.discordapp.net/external/S4K7rlM4DWPFINDZKKmlrGGi3ULoMG4R6rcwRlQz8LU/%3Ftext%3Dinvalid/https/placehold.jp/42/444/fff/600x400.png"
 );
 
-export async function getThumbnailUrl(data: string): Promise<URL | null> {
+export async function getThumbnailUrl(data: string, width: number, height: number): Promise<URL | null> {
     try {
         const decoded = defs.decode(data);
-        if (!decoded) return null;
+        if (!decoded || !width || !height) return null;
 
         const text = defs.stringify(decoded.format, decoded.data);
-        const url = new URL("https://placehold.jp/42/444/fff/600x400.png");
+        const url = new URL(`https://placehold.jp/42/444/fff/${width}x${height}.png`);
         url.searchParams.append("text", text);
 
         return await RestAPI.post({
@@ -126,18 +132,17 @@ export async function getThumbnailUrl(data: string): Promise<URL | null> {
 
 const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
 
-const promptToUpload = UploadHandler.promptToUpload as (
+const promptToUpload = UploadHandler.promptToUpload as unknown as (
     files: File[],
     channel: Channel,
     draftType: DraftType,
     options?: FileUploadOptions
-) => void | Promise<void>;
+) => Promise<void>;
 
 export async function reuploadAttachment(attachment: MessageAttachment, channel: Channel, options?: FileUploadOptions) {
     return await Native.fetchAttachment(attachment)
         .then(({ data, filename, type }) => new File([data], filename, { type }))
-        .then(file => ({ upload: promptToUpload([file], channel, DraftType.ChannelMessage, options) }))
-        .catch(() => ({ upload: null }));
+        .then(file => ({ upload: promptToUpload([file], channel, DraftType.ChannelMessage, options) }));
 }
 
 export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {
@@ -204,7 +209,7 @@ function filterItems(items: Record<string, FavouriteItem> | null, itemFormat: Cu
             item,
             score: fuzzySearch(query, normalize(defs.stringify(item.format, item.data)))
         }))
-        .filter(({ score }) => score)
+        .filter(({ score }) => score !== null)
         .sort((a, b) => b.score! - a.score!)
         .map(({ item }) => item);
 }
@@ -230,27 +235,26 @@ export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string
     return state;
 }
 
-export function useListScroller(count: number) {
-    const rowHeights = useRef<number[]>([]);
+// Helper hook for the ListScroller component, similar utility is used in the forum channel list view
+// for keeping track of the individual row heights
+export function useListScroller() {
+    const rowHeights = useRef(new Map<Key, number>());
     const update = useForceUpdater();
 
-    useEffect(() => {
-        if (count === rowHeights.current.length) return;
+    const handleResize = useCallback((key: Key, height: number) => {
+        if (height === rowHeights.current.get(key)) return;
 
-        rowHeights.current = new Array(count);
-        update();
-    }, [count]);
-
-    const handleResize = useCallback((row: number, height: number) => {
-        if (height === rowHeights.current[row]) return;
-
-        rowHeights.current[row] = height;
+        rowHeights.current.set(key, height);
         update();
     }, []);
 
-    return [rowHeights, handleResize] as const;
+    return [rowHeights.current, handleResize] as const;
 }
 
+// Wrapper class for Queue which allows batching multiple requests into one.
+// A request is fired immediately if at least `maxCount` items are in this queue,
+// or if enough time (`timeout`) has passed since the last item was added.
+// Subsequent requests are fired in sequence.
 export class BatchedRequestQueue<T> {
     private items: T[] = [];
     private timer: NodeJS.Timeout | null = null;
@@ -261,7 +265,7 @@ export class BatchedRequestQueue<T> {
         private readonly options: { maxCount: number; timeout?: number }
     ) {}
 
-    add(item: T) {
+    public add(item: T) {
         if (this.items.indexOf(item) !== -1) return;
         this.items.push(item);
 

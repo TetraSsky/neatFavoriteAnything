@@ -6,6 +6,7 @@
 
 import { EmbedJSON, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
+import { JsonValue } from "type-fest";
 
 declare global {
     interface Uint8Array {
@@ -74,7 +75,7 @@ export enum CustomItemFormat {
     ATTACHMENT = 0
 }
 
-export interface CustomItemDef<A = any, B = any> {
+export interface CustomItemDef<A = any, B extends JsonValue = any> {
     encode: (data: A) => B | null;
     decode: (data: B) => NoInfer<A> | null;
     stringify: (data: A) => string;

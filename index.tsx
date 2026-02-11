@@ -33,13 +33,24 @@ export default definePlugin({
     description: "Favourite any image",
     authors: [Devs.nin0dev, { name: "Davri", id: 457579346282938368n }],
     patches: [
+        // EMBEDS
         {
+            // Wrap the embed component's render method in a custom context to avoid having to drill props
             find: "#{intl::SUPPRESS_ALL_EMBEDS}",
             replacement: {
                 match: "render()",
                 replace: "$&{return $self.renderEmbed.call(this)}__render()"
             }
         },
+        {
+            // Override the default renderAdjacentContent prop value for all types of embed components (renderImageComponent, renderVideoComponent...)
+            find: "#{intl::MEDIA_MOSAIC_ALT_TEXT_POPOUT_TITLE}",
+            replacement: {
+                match: /renderAdjacentContent:(\i)/g,
+                replace: "$&=$self.renderEmbedAccessory"
+            }
+        },
+        // ATTACHMENTS
         {
             find: '["VIDEO","CLIP","AUDIO"]',
             replacement: [
@@ -48,45 +59,46 @@ export default definePlugin({
                     replace: "$&const __props=$1;"
                 },
                 {
+                    // Wrap the attachment component in a custom context to avoid having to drill props
                     match: /children:(\i)=>(V\(\1\))\}\):(V\(\))/,
                     replace: "children:$1=>$self.renderAttachment($2,__props)}):$self.renderAttachment($3,__props)"
                 },
                 {
+                    // Always add our custom accessory to the attachment's adjacent content
                     match: "=[];",
                     replace: "=[$self.renderAttachmentAccessory()];"
                 }
             ]
         },
-        {
-            find: "#{intl::MEDIA_MOSAIC_ALT_TEXT_POPOUT_TITLE}",
-            replacement: {
-                match: /renderAdjacentContent:(\i)/g,
-                replace: "$&=$self.renderEmbedAccessory"
-            }
-        },
+        // EXPRESSION PICKER
         {
             find: "#{intl::EXPRESSION_PICKER_CATEGORIES_A11Y_LABEL}",
             replacement: [
                 {
+                    // Replace the "GIFs" tab with two custom tabs
                     match: /\(0,\i\.jsx\)\((\i),.{20,40}?"aria-selected":(\i).{50,100}?#{intl::EXPRESSION_PICKER_GIF}\)\}\)/,
                     replace: "$self.renderTabs($1,$2)"
                 },
                 {
+                    // Insert the custom file picker into the expression picker's body
                     match: /(?<=null,)(\i)===\i\.\i\.EMOJI/,
                     replace: "$self.renderFilePicker($1),$&"
                 }
             ]
         },
         {
+            // Hide favourite files from the GIFs/Media tab
             find: '.sortBy("order").reverse().value()',
             replacement: {
                 match: '.sortBy("order").reverse()',
                 replace: "$&.filter($self.filterGifs)"
             }
         },
+        // FAVOURITE BUTTON
         {
             find: "#{intl::GIF_TOOLTIP_REMOVE_FROM_FAVORITES}",
             replacement: {
+                // Intercept the onClick callback to replace the placeholder thumbnail with a valid CDN link
                 match: /\(0,(\i\.\i)\)\((\{[^}].{40,60}?\})\)/,
                 replace: "$self.interceptAddToFavourites($2).then($1)"
             }
@@ -133,14 +145,14 @@ export default definePlugin({
     interceptAddToFavourites: async (item: FavouriteItem & { url: string }) => {
         if (item.format !== FavouriteItemFormat.NONE) return item;
 
-        SignedUrlsStore.add(item.url);
+        SignedUrlsStore.addSigned(item.url);
 
         if (URL.canParse(item.src)) {
-            SignedUrlsStore.add(item.src);
+            SignedUrlsStore.addSigned(item.src);
             return item;
         }
 
-        const thumbnail = await getThumbnailUrl(item.src);
+        const thumbnail = await getThumbnailUrl(item.src, item.width, item.height);
         if (!thumbnail) return item;
 
         thumbnail.search = "";

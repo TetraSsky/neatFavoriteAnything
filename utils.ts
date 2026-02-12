@@ -33,6 +33,7 @@ import { deflateSync, inflateSync } from "fflate";
 import { Key, RefObject } from "react";
 import { JsonValue } from "type-fest";
 
+import { base64ToUint8Array, uint8ArrayToBase64 } from "./polyfills";
 import { PendingReplyStore } from "./stores";
 import {
     CustomItemDef,
@@ -55,7 +56,7 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
                 const obj = [format, def[format].encode(data)];
 
                 const buf = deflateSync(new TextEncoder().encode(JSON.stringify(obj)));
-                return buf.toBase64({ alphabet: "base64url", omitPadding: true });
+                return uint8ArrayToBase64(buf);
             } catch {
                 return null;
             }
@@ -64,7 +65,7 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
             try {
                 if (!raw) return null;
 
-                const buf = inflateSync(Uint8Array.fromBase64(raw, { alphabet: "base64url" }));
+                const buf = inflateSync(base64ToUint8Array(raw));
                 const parsed: unknown[] | null = JSON.parse(new TextDecoder().decode(buf));
                 if (!Array.isArray(parsed)) return null;
 

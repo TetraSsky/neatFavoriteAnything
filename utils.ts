@@ -16,6 +16,7 @@ import {
     DraftType,
     FluxDispatcher,
     MessageActions,
+    PermissionStore,
     RestAPI,
     Toasts,
     UploadAttachmentStore,
@@ -176,6 +177,10 @@ export async function sendAttachment(attachment: MessageAttachment, channel: Cha
         ...MessageActions.getSendMessageOptionsForReply(reply),
         attachmentsToUpload: [upload]
     });
+}
+
+export function hasPermission(permission: bigint, channel: Channel | null): boolean {
+    return !!channel && (PermissionStore.can(permission, channel) || channel.isPrivate());
 }
 
 export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {

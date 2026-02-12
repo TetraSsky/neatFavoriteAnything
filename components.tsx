@@ -45,7 +45,16 @@ import {
 import { AttachmentContext, EmbedContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
-import { cl, defs, ImageUtils, sendAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import {
+    cl,
+    defs,
+    hasPermission,
+    ImageUtils,
+    sendAttachment,
+    useFavourites,
+    useListScroller,
+    useResizeObserver
+} from "./utils";
 
 type ListScrollerRef = { scrollToTop: () => void };
 const ListScroller = ListScrollerThin as ComponentType<
@@ -261,13 +270,10 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
 
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],
-        () => {
-            if (!channel || channel.isPrivate()) return {};
-            return {
-                canAttachFiles: PermissionStore.can(PermissionsBits.ATTACH_FILES, channel),
-                canSendMessages: PermissionStore.can(PermissionsBits.SEND_MESSAGES, channel)
-            };
-        },
+        () => ({
+            canAttachFiles: hasPermission(PermissionsBits.ATTACH_FILES, channel),
+            canSendMessages: hasPermission(PermissionsBits.SEND_MESSAGES, channel)
+        }),
         [channel]
     );
 

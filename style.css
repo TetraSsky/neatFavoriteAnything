@@ -12,10 +12,11 @@
         flex: 1;
         min-width: 0;
 
-        > * {
+        > [class*="nonVisualMediaItem"] {
             width: 100%;
 
-            [class*="mosaicItemContent"] {
+            [class*="mosaicItem"] {
+                min-width: 0;
                 max-width: unset;
             }
         }

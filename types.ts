@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { EmbedJSON, MessageAttachment } from "@vencord/discord-types";
+import { Embed, EmbedJSON, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
 import { JsonValue } from "type-fest";
 
@@ -81,4 +81,23 @@ export interface RefreshedUrlsResponse {
 
 export interface UnfurledEmbedsResponse {
     embeds: EmbedJSON[];
+}
+
+interface EmbedMedia {
+    url: string;
+    proxyURL?: string;
+    contentType: string;
+    width: number;
+    height: number;
+    placeholder: string;
+    placeholderVersion: number;
+    srcIsAnimated: boolean;
+    flags: number;
+    description?: string;
+}
+
+export interface FullEmbed extends Omit<Embed, "image" | "video"> {
+    image?: EmbedMedia;
+    images?: EmbedMedia[];
+    video?: EmbedMedia;
 }

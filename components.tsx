@@ -6,7 +6,7 @@
 
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
-import { Channel, Embed, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
+import { Channel, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import {
     findByCode,
@@ -42,9 +42,9 @@ import {
     Ref
 } from "react";
 
-import { AttachmentContext, EmbedContext } from ".";
+import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
-import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat } from "./types";
+import { AttachmentItem, CustomItemFormat, FavouriteItem, FavouriteItemFormat, FullEmbed } from "./types";
 import {
     cl,
     defs,
@@ -309,30 +309,38 @@ const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
 
 export function EmbedAccessory() {
     const embed = React.useContext(EmbedContext);
+    const mosaicIndex = React.useContext(EmbedMosaicContext);
 
     const props: FavoriteButtonProps | null = useMemo(() => {
-        if (!embed) return null;
+        if (!embed || embed.type === "gifv") return null;
 
-        const { image, video, thumbnail, type } = embed;
-        const content = video ?? image;
-        if (!content) return null;
+        const { video, image, images, thumbnail } = embed;
 
-        // This field is missing on videos by third party providers (TikTok, YouTube ...)
-        const isProxiedVideo = !!video?.proxyURL;
+        if (video) {
+            // This field is missing on videos by third party providers (TikTok, YouTube ...)
+            const isProxiedVideo = !!video.proxyURL;
 
-        // External videos don't have a video.proxyURL property that could be used for the preview - use the static thumbnail instead
-        const src = content?.proxyURL ?? thumbnail?.proxyURL ?? content.url;
-        const format = isProxiedVideo ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE;
+            // External videos don't have a video.proxyURL property that could be used for the preview - use the static thumbnail instead
+            const src = video.proxyURL ?? thumbnail?.proxyURL ?? video.url;
+            const format = isProxiedVideo ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE;
 
-        // External videos' content.url usually doesn't point to a valid resource that could be embedded
-        const url = video && !isProxiedVideo ? embed.url! : content?.url;
+            // External videos' content.url usually doesn't point to a valid resource that could be embedded
+            const url = !isProxiedVideo ? embed.url! : video.url;
+
+            return { ...video, format, src, url };
+        }
+
+        const img = (mosaicIndex != null && images?.[mosaicIndex]) || image;
+        if (!img) return null;
+
+        const src = img.proxyURL ?? img.url;
 
         // Do not render the custom embed accessory if the original image already has a gif accessory
-        const isAnimated = ImageUtils.isAnimated({ original: url, src, animated: type === "gifv" });
+        const isAnimated = ImageUtils.isAnimated({ ...img, original: img.url, src, animated: false });
         if (isAnimated) return null;
 
-        return { format, src, url, width: content.width, height: content.height };
-    }, [embed]);
+        return { ...img, format: FavouriteItemFormat.IMAGE, src };
+    }, [embed, mosaicIndex]);
 
     return (
         props && (
@@ -381,6 +389,6 @@ export function AttachmentAccessory() {
     return props && <FavoriteButton {...props} className={cl("attachment-accessory")} />;
 }
 
-export interface EmbedComponent extends Component<{ embed: Embed }> {
+export interface EmbedComponent extends Component<{ embed: FullEmbed }> {
     __render: () => ReactNode;
 }

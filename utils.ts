@@ -98,13 +98,13 @@ export const defs = defineItems({
             content_type
         ],
         decode: ([id, filename, size, path, content_type]) => ({
-            id: `${id}`,
-            filename: `${filename}`,
+            id: id ?? "0",
+            filename: filename ?? "UNKNOWN",
             size: +size! || 0,
-            url: `${new URL(path, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
-            proxy_url: `${new URL(path, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
-            content_type: `${content_type}`,
-            spoiler: false
+            url: `${new URL(path!, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
+            proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
+            content_type: content_type ?? "application/octet-stream",
+            spoiler: filename?.startsWith("SPOILER_") ?? false
         }),
         stringify: ({ filename }) => filename
     })

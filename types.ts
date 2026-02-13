@@ -6,7 +6,7 @@
 
 import { Embed, EmbedJSON, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
-import { JsonValue } from "type-fest";
+import { JsonValue, PartialDeep } from "type-fest";
 
 export enum Format {
     NONE = 0,
@@ -62,7 +62,7 @@ export enum CustomItemFormat {
 
 export interface CustomItemDef<A = any, B extends JsonValue = any> {
     encode: (data: A) => B | null;
-    decode: (data: B) => NoInfer<A> | null;
+    decode: (data: PartialDeep<B, { recurseIntoArrays: true }>) => NoInfer<A> | null;
     stringify: (data: A) => string;
 }
 

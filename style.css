@@ -18,6 +18,12 @@
             [class*="mosaicItem"] {
                 min-width: 0;
                 max-width: unset;
+                width: 100%;
+            }
+
+            [class*="spoilerContent"] {
+                min-width: 0;
+                flex: 1;
             }
         }
     }

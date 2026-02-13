@@ -63,13 +63,9 @@ export default definePlugin({
             find: '["VIDEO","CLIP","AUDIO"]',
             replacement: [
                 {
-                    match: /let \i=function\((\i)\)\{/,
-                    replace: "$&const __props=$1;"
-                },
-                {
                     // Wrap the attachment component in a custom context to avoid having to drill props
-                    match: /children:(\i)=>(V\(\1\))\}\):(V\(\))/,
-                    replace: "children:$1=>$self.renderAttachment($2,__props)}):$self.renderAttachment($3,__props)"
+                    match: /(?<=children:)(\i)=>(\i\(\1\))\}\):(\i\(\))/,
+                    replace: "$1=>$self.renderAttachment($2,arguments[0])}):$self.renderAttachment($3,arguments[0])"
                 },
                 {
                     // Always add our custom accessory to the attachment's adjacent content

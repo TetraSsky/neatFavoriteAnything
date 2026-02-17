@@ -9,7 +9,6 @@ import "./style.css";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Embed } from "@vencord/discord-types";
 import { proxyLazyWebpack } from "@webpack";
 import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
@@ -21,11 +20,13 @@ import {
     ExpressionPickerTabProps,
     ExpressionPickerView,
     FavouriteItem,
-    FavouriteItemFormat
+    FavouriteItemFormat,
+    FullEmbed
 } from "./types";
 import { getThumbnailUrl } from "./utils";
 
-export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | Embed>(null));
+export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | FullEmbed>(null));
+export const EmbedMosaicContext = proxyLazyWebpack(() => React.createContext<null | number>(null));
 export const AttachmentContext = proxyLazyWebpack(() => React.createContext<null | AttachmentItem>(null));
 
 export default definePlugin({
@@ -35,12 +36,19 @@ export default definePlugin({
     patches: [
         // EMBEDS
         {
-            // Wrap the embed component's render method in a custom context to avoid having to drill props
             find: "#{intl::SUPPRESS_ALL_EMBEDS}",
-            replacement: {
-                match: "render()",
-                replace: "$&{return $self.renderEmbed.call(this)}__render()"
-            }
+            replacement: [
+                {
+                    // Wrap the embed component's render method in a custom context to avoid having to drill props
+                    match: "render()",
+                    replace: "$&{return $self.renderEmbed.call(this)}__render()"
+                },
+                {
+                    // Specify the index for individual items in embed.images
+                    match: /\.images\.map\((\i)=>(this.renderImage\(\{[^}]{50,100}\}\))\)/,
+                    replace: ".images.map(($1,__index)=>$self.renderEmbedMosaicItem($2,__index))"
+                }
+            ]
         },
         {
             // Override the default renderAdjacentContent prop value for all types of embed components (renderImageComponent, renderVideoComponent...)
@@ -55,13 +63,9 @@ export default definePlugin({
             find: '["VIDEO","CLIP","AUDIO"]',
             replacement: [
                 {
-                    match: /let \i=function\((\i)\)\{/,
-                    replace: "$&const __props=$1;"
-                },
-                {
                     // Wrap the attachment component in a custom context to avoid having to drill props
-                    match: /children:(\i)=>(V\(\1\))\}\):(V\(\))/,
-                    replace: "children:$1=>$self.renderAttachment($2,__props)}):$self.renderAttachment($3,__props)"
+                    match: /(?<=children:)(\i)=>(\i\(\1\))\}\):(\i\(\))/,
+                    replace: "$1=>$self.renderAttachment($2,arguments[0])}):$self.renderAttachment($3,arguments[0])"
                 },
                 {
                     // Always add our custom accessory to the attachment's adjacent content
@@ -138,6 +142,9 @@ export default definePlugin({
     },
     renderEmbed(this: EmbedComponent) {
         return <EmbedContext.Provider value={this.props.embed}>{this.__render()}</EmbedContext.Provider>;
+    },
+    renderEmbedMosaicItem(children: ReactNode, index: number) {
+        return <EmbedMosaicContext.Provider value={index}>{children}</EmbedMosaicContext.Provider>;
     },
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,

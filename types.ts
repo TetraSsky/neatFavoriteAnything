@@ -4,24 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { EmbedJSON, MessageAttachment } from "@vencord/discord-types";
+import { Embed, EmbedJSON, MessageAttachment } from "@vencord/discord-types";
 import { PropsWithChildren } from "react";
-import { JsonValue } from "type-fest";
-
-declare global {
-    interface Uint8Array {
-        toBase64(options?: { alphabet?: "base64" | "base64url"; omitPadding?: boolean }): string;
-    }
-    interface Uint8ArrayConstructor {
-        fromBase64(
-            base64: string,
-            options?: {
-                alphabet?: "base64" | "base64url";
-                lastChunkHandling?: "loose" | "strict" | "stop-before-partial";
-            }
-        ): Uint8Array<ArrayBuffer>;
-    }
-}
+import { JsonValue, PartialDeep } from "type-fest";
 
 export enum Format {
     NONE = 0,
@@ -77,7 +62,7 @@ export enum CustomItemFormat {
 
 export interface CustomItemDef<A = any, B extends JsonValue = any> {
     encode: (data: A) => B | null;
-    decode: (data: B) => NoInfer<A> | null;
+    decode: (data: PartialDeep<B, { recurseIntoArrays: true }>) => NoInfer<A> | null;
     stringify: (data: A) => string;
 }
 
@@ -96,4 +81,23 @@ export interface RefreshedUrlsResponse {
 
 export interface UnfurledEmbedsResponse {
     embeds: EmbedJSON[];
+}
+
+interface EmbedMedia {
+    url: string;
+    proxyURL?: string;
+    contentType: string;
+    width: number;
+    height: number;
+    placeholder: string;
+    placeholderVersion: number;
+    srcIsAnimated: boolean;
+    flags: number;
+    description?: string;
+}
+
+export interface FullEmbed extends Omit<Embed, "image" | "video"> {
+    image?: EmbedMedia;
+    images?: EmbedMedia[];
+    video?: EmbedMedia;
 }

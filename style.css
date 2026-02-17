@@ -12,11 +12,18 @@
         flex: 1;
         min-width: 0;
 
-        > * {
+        > [class*="nonVisualMediaItem"] {
             width: 100%;
 
-            [class*="mosaicItemContent"] {
+            [class*="mosaicItem"] {
+                min-width: 0;
                 max-width: unset;
+                width: 100%;
+            }
+
+            [class*="spoilerContent"] {
+                min-width: 0;
+                flex: 1;
             }
         }
     }
@@ -65,6 +72,10 @@
     top: 6px;
     z-index: 3;
     cursor: pointer;
+
+    :has(> &) {
+        position: relative;
+    }
 
     :is(.imageWrapper:is(:hover, :focus-within) ~ &, :hover, :focus-within) > [class*="gifFavoriteButton"] {
         opacity: 1;

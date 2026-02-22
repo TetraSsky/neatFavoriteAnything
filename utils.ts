@@ -139,20 +139,35 @@ export async function getThumbnailUrl(data: string, width: number, height: numbe
 }
 
 const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
+async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
+    if (!IS_WEB)
+        return Native.fetchAttachment(attachment).then(
+            ({ data, filename, type }) => new File([data], filename, { type })
+        );
+
+    const { url, content_type, filename } = attachment;
+    const res = await fetch(url, { headers: { Accept: "*/*" } });
+    if (!res.ok) throw new Error("Server error");
+
+    const blob = await res.blob();
+    const type = blob.type || content_type || "application/octet-stream";
+    const data = await blob.arrayBuffer();
+
+    return new File([data], filename, { type });
+}
+
 const promptToUpload = UploadHandler.promptToUpload as unknown as (
     ...args: Parameters<typeof UploadHandler.promptToUpload>
 ) => Promise<void>;
 
 export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
-    const file = await Native.fetchAttachment(attachment)
-        .then(({ data, filename, type }) => new File([data], filename, { type }))
-        .catch(() =>
-            Toasts.show({
-                message: `Couldn't fetch ${attachment.filename}`,
-                id: Toasts.genId(),
-                type: Toasts.Type.FAILURE
-            })
-        );
+    const file = await fetchAttachment(attachment).catch(() =>
+        Toasts.show({
+            message: `Couldn't fetch ${attachment.filename}`,
+            id: Toasts.genId(),
+            type: Toasts.Type.FAILURE
+        })
+    );
     if (!file) return;
 
     // Using promptToUpload instead of addFiles directly since it has file size checks with error popups

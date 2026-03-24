@@ -164,4 +164,5 @@ export interface FullEmbed extends Omit<Embed, "image" | "video"> {
 
 export interface FullMessageAttachment extends MessageAttachment {
     title?: string;
+    description?: string;
 }

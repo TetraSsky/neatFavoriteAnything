@@ -7,7 +7,7 @@
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { LazyComponentWrapper } from "@utils/lazyReact";
-import { Message, MessageAttachment } from "@vencord/discord-types";
+import { Message } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findComponentByCode, findComponentByCodeLazy, findCssClassesLazy, proxyLazyWebpack } from "@webpack";
 import { ChannelStore, ExpressionPickerStore, ListScrollerThin, lodash, PermissionsBits, PermissionStore, React, useCallback, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
@@ -15,7 +15,7 @@ import { ComponentProps, ComponentType, ReactNode, Ref } from "react";
 
 import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
-import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
+import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, FullMessageAttachment, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
 import { cl, defs, hasPermission, ImageUtils, sendAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
 
 const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
@@ -34,7 +34,7 @@ const ListScroller = ListScrollerThin as ComponentType<
     }
 >;
 
-function createPreviewMessage(attachment: MessageAttachment, channelId: string) {
+function createPreviewMessage(attachment: FullMessageAttachment, channelId: string) {
     const previewMessage = {
         id: `favourite-anything-preview-${attachment.id}`,
         attachments: [attachment],
@@ -148,7 +148,7 @@ function EmptyList() {
     return <BaseText className={cl("info-text")}>No files match your search.</BaseText>;
 }
 
-const demoAttachment: MessageAttachment = {
+const demoAttachment: FullMessageAttachment = {
     id: "1",
     filename: "file",
     content_type: "application/octet-stream",
@@ -192,7 +192,7 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
         () => ({ ...file, url: SignedUrlsStore.get(file.url), proxy_url: SignedUrlsStore.get(file.proxy_url) }),
         [file],
         lodash.isEqual
-    ) as MessageAttachment;
+    ) as FullMessageAttachment;
 
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],

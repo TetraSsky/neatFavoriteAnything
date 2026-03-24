@@ -61,7 +61,7 @@ export interface FilePickerProps {
 
 export interface FilePickerItemProps {
     url: string;
-    file: MessageAttachment;
+    file: FullMessageAttachment;
     channel: Channel | null;
     reducePadding?: boolean;
     onResize: (key: Key, height: number) => void;
@@ -69,7 +69,7 @@ export interface FilePickerItemProps {
 }
 
 export interface AttachmentsComponentProps {
-    attachment: MessageAttachment;
+    attachment: FullMessageAttachment;
 }
 
 export interface EmbedComponent extends Component<{ embed: FullEmbed }> {
@@ -85,7 +85,7 @@ export interface AttachmentItem {
     spoiler: boolean;
     srcIsAnimated: boolean;
     uniqueId: string;
-    originalItem: MessageAttachment;
+    originalItem: FullMessageAttachment;
 }
 
 export enum FavouriteItemFormat {
@@ -160,4 +160,8 @@ export interface FullEmbed extends Omit<Embed, "image" | "video"> {
     image?: EmbedMedia;
     images?: EmbedMedia[];
     video?: EmbedMedia;
+}
+
+export interface FullMessageAttachment extends MessageAttachment {
+    title?: string;
 }

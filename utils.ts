@@ -10,7 +10,7 @@ import { proxyLazy } from "@utils/lazy";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
-import { Channel, MessageAttachment } from "@vencord/discord-types";
+import { Channel } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
 import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
@@ -18,7 +18,7 @@ import { Key } from "react";
 import { JsonValue } from "type-fest";
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from "./polyfills";
-import { CustomItemDef, CustomItemFormat, FavouriteItem, FavouriteItemFormat, ImageUtils as ImageUtils_, ItemsDef, ResizeObserverHook, UnfurledEmbedsResponse } from "./types";
+import { CustomItemDef, CustomItemFormat, FavouriteItem, FavouriteItemFormat, FullMessageAttachment, ImageUtils as ImageUtils_, ItemsDef, ResizeObserverHook, UnfurledEmbedsResponse } from "./types";
 
 const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
 
@@ -70,23 +70,25 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
 // Stringify returns a simple string representation used for thumbnail text and expression picker search.
 export const defs = defineItems({
     [CustomItemFormat.ATTACHMENT]: defineItem({
-        encode: ({ id, filename, size, url, content_type = "" }: MessageAttachment) => [
+        encode: ({ id, filename, size, url, content_type = "", title }: FullMessageAttachment) => [
             id,
             filename,
             size,
             new URL(url).pathname,
-            content_type
+            content_type,
+            title ?? null
         ],
-        decode: ([id, filename, size, path, content_type]) => ({
+        decode: ([id, filename, size, path, content_type, title]) => ({
             id: id ?? "0",
             filename: filename ?? "UNKNOWN",
             size: +size! || 0,
             url: `${new URL(path!, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
             proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
             content_type: content_type ?? "application/octet-stream",
-            spoiler: filename?.startsWith("SPOILER_") ?? false
+            spoiler: filename?.startsWith("SPOILER_") ?? false,
+            title: title ?? undefined
         }),
-        stringify: ({ filename }) => filename
+        stringify: ({ title, filename }) => title?.trim() || filename
     })
     // This could be expanded in the future with other item types (e.g. voice messages)
 });
@@ -128,7 +130,7 @@ export const isAllowedHost = proxyLazy(() => {
     return (value: string) => allowedHosts.has(value);
 });
 
-async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
+async function fetchAttachment(attachment: FullMessageAttachment): Promise<File> {
     if (!IS_WEB)
         return Native.fetchAttachment(attachment).then(
             ({ data, filename, type }) => new File([data], filename, { type })
@@ -152,7 +154,7 @@ const promptToUpload = UploadHandler.promptToUpload as unknown as (
     ...args: Parameters<typeof UploadHandler.promptToUpload>
 ) => Promise<void>;
 
-export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
+export async function sendAttachment(attachment: FullMessageAttachment, channel: Channel) {
     const file = await fetchAttachment(attachment)
         .catch(() =>
             Toasts.show({

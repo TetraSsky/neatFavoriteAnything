@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { MessageAttachment } from "@vencord/discord-types";
+import { FullMessageAttachment } from "./types";
 
 const allowedHosts = new Set([
     "cdn.discordapp.com",
@@ -15,7 +15,7 @@ const allowedHosts = new Set([
 
 // Discord has very strict CORS rules for which types of assets can be fetched from where (CDN/Media proxy),
 // and most binary file types are prohibited by both. This function serves as a simple bypass.
-export async function fetchAttachment(_: unknown, attachment: MessageAttachment) {
+export async function fetchAttachment(_: unknown, attachment: FullMessageAttachment) {
     const { content_type, filename } = attachment;
     const url = URL.parse(attachment.url);
     if (!url || !allowedHosts.has(url.hostname)) throw new Error("Invalid URL");

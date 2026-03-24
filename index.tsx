@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "./style.css";
-
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
@@ -13,16 +11,10 @@ import { proxyLazyWebpack } from "@webpack";
 import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
-import { AttachmentAccessory, EmbedAccessory, EmbedComponent, FilePicker } from "./components";
+import { AttachmentAccessory, EmbedAccessory, FilePicker } from "./components";
 import { SignedUrlsStore } from "./stores";
-import {
-    AttachmentItem,
-    ExpressionPickerTabProps,
-    ExpressionPickerView,
-    FavouriteItem,
-    FavouriteItemFormat,
-    FullEmbed
-} from "./types";
+import managedStyle from "./style.css?managed";
+import { AttachmentItem, EmbedComponent, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat, FullEmbed } from "./types";
 import { getThumbnailUrl } from "./utils";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | FullEmbed>(null));
@@ -31,8 +23,9 @@ export const AttachmentContext = proxyLazyWebpack(() => React.createContext<null
 
 export default definePlugin({
     name: "FavouriteAnything",
-    description: "Favourite any image",
+    description: "Favourite any image, video, or file attachment",
     authors: [Devs.nin0dev, { name: "Davri", id: 457579346282938368n }],
+    managedStyle,
     patches: [
         // EMBEDS
         {
@@ -46,7 +39,7 @@ export default definePlugin({
                 {
                     // Specify the index for individual items in embed.images
                     match: /\.images\.map\((\i)=>(this.renderImage\(\{[^}]{50,100}\}\))\)/,
-                    replace: ".images.map(($1,__index)=>$self.renderEmbedMosaicItem($2,__index))"
+                    replace: ".images.map(($1,index)=>$self.renderEmbedMosaicItem($2,index))"
                 }
             ]
         },
@@ -134,10 +127,10 @@ export default definePlugin({
             </>
         );
     },
-    renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string }) => void) {
+    renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void) {
         return activeView === ExpressionPickerView.FILES ? <FilePicker onSelectItem={onSelectGIF} /> : null;
     },
-    renderAttachment(children: ReactNode, props: { item: AttachmentItem }) {
+    renderAttachment(children: ReactNode, props: { item: AttachmentItem; }) {
         return <AttachmentContext.Provider value={props.item}>{children}</AttachmentContext.Provider>;
     },
     renderEmbed(this: EmbedComponent) {
@@ -149,7 +142,7 @@ export default definePlugin({
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,
     filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE,
-    interceptAddToFavourites: async (item: FavouriteItem & { url: string }) => {
+    interceptAddToFavourites: async (item: FavouriteItem & { url: string; }) => {
         if (item.format !== FavouriteItemFormat.NONE) return item;
 
         SignedUrlsStore.addSigned(item.url);

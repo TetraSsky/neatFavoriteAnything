@@ -4,15 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Embed, EmbedJSON, MessageAttachment } from "@vencord/discord-types";
-import { PropsWithChildren } from "react";
+import { Channel, Embed, EmbedJSON, Message, MessageAttachment, TextInput } from "@vencord/discord-types";
+import { Component, ComponentClass, ComponentProps, ComponentPropsWithRef, Key, PropsWithChildren, ReactNode, RefObject } from "react";
 import { JsonValue, PartialDeep } from "type-fest";
-
-export enum Format {
-    NONE = 0,
-    IMAGE = 1,
-    VIDEO = 2
-}
 
 export enum ExpressionPickerView {
     EMOJI = "emoji",
@@ -28,6 +22,58 @@ export interface ExpressionPickerTabProps extends PropsWithChildren {
     "aria-selected"?: boolean;
     isActive?: boolean;
     viewType: ExpressionPickerView;
+}
+
+export interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
+    url: string;
+    gifSrc?: string;
+    className?: string;
+}
+
+// Partial type, renderAttachments only uses a few props
+interface MessageComponentProps {
+    message: Message;
+    channel: Channel;
+    gifAutoPlay?: boolean;
+    canDeleteAttachments?: boolean;
+    shouldHideMediaOptions?: boolean;
+    inlineAttachmentMedia?: boolean;
+}
+
+export interface MessageComponentClass extends Omit<ComponentClass<MessageComponentProps>, "new"> {
+    new (props: MessageComponentProps): Component<MessageComponentProps> & {
+        renderAttachments(message: Partial<Message>): ReactNode;
+    };
+}
+
+export interface ManaSearchBarProps extends Pick<
+    ComponentPropsWithRef<TextInput>,
+    "autoFocus" | "placeholder" | "onKeyDown" | "disabled" | "onChange" | "onBlur" | "onFocus" | "autoComplete" | "ref"
+> {
+    query?: string;
+    onClear?: () => void;
+    inputProps?: ComponentProps<TextInput>;
+}
+
+export interface FilePickerProps {
+    onSelectItem: (item: { url: string }) => void;
+}
+
+export interface FilePickerItemProps {
+    url: string;
+    file: MessageAttachment;
+    channel: Channel | null;
+    reducePadding?: boolean;
+    onResize: (key: Key, height: number) => void;
+    onSubmit: (url: string) => void;
+}
+
+export interface AttachmentsComponentProps {
+    attachment: MessageAttachment;
+}
+
+export interface EmbedComponent extends Component<{ embed: FullEmbed }> {
+    __render: () => ReactNode;
 }
 
 export interface AttachmentItem {
@@ -81,6 +127,20 @@ export interface RefreshedUrlsResponse {
 
 export interface UnfurledEmbedsResponse {
     embeds: EmbedJSON[];
+}
+
+export type ResizeObserverHook = (
+    ref: RefObject<Element | null>,
+    callback: (size: { width: number; height: number }) => void,
+    deps?: unknown[]
+) => void;
+
+export interface ImageUtils {
+    isAnimated(image: { src: string; original?: string; animated: boolean; srcIsAnimated?: boolean }): boolean;
+}
+
+export interface ScrollerBaseRef {
+    scrollToTop: () => void;
 }
 
 interface EmbedMedia {

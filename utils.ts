@@ -6,46 +6,26 @@
 
 import { classNameFactory } from "@utils/css";
 import { sendMessage } from "@utils/discord";
+import { proxyLazy } from "@utils/lazy";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
-import {
-    Constants,
-    DraftType,
-    FluxDispatcher,
-    MessageActions,
-    PermissionStore,
-    RestAPI,
-    Toasts,
-    UploadAttachmentStore,
-    UploadHandler,
-    UploadManager,
-    useCallback,
-    useEffect,
-    useRef,
-    UserSettingsActionCreators,
-    UserSettingsProtoStore,
-    useState,
-    useStateFromStores
-} from "@webpack/common";
+import { findByCodeLazy, findByPropsLazy } from "@webpack";
+import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
-import { Key, RefObject } from "react";
+import { Key } from "react";
 import { JsonValue } from "type-fest";
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from "./polyfills";
-import { PendingReplyStore } from "./stores";
-import {
-    CustomItemDef,
-    CustomItemFormat,
-    FavouriteItem,
-    FavouriteItemFormat,
-    ItemsDef,
-    UnfurledEmbedsResponse
-} from "./types";
+import { CustomItemDef, CustomItemFormat, FavouriteItem, FavouriteItemFormat, ImageUtils as ImageUtils_, ItemsDef, ResizeObserverHook, UnfurledEmbedsResponse } from "./types";
+
+const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
 
 export const cl = classNameFactory("vc-favouriteAnything-");
+
+export const useResizeObserver: ResizeObserverHook = findByCodeLazy("borderBoxSize", "blockSize", "inlineSize");
+export const ImageUtils: ImageUtils_ = findByPropsLazy("isAnimated", "getFormatQuality");
 
 const defineItem = <const A, const B extends JsonValue>(item: CustomItemDef<A, B>) => item;
 function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: ItemsDef<T>) {
@@ -74,7 +54,7 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
                 if (!(format in def)) return null;
 
                 return { format, data: def[format].decode(data) } as {
-                    [F in CustomItemFormat]: { format: F; data: Type<F> };
+                    [F in CustomItemFormat]: { format: F; data: Type<F>; };
                 }[CustomItemFormat];
             } catch {
                 return null;
@@ -111,10 +91,8 @@ export const defs = defineItems({
     // This could be expanded in the future with other item types (e.g. voice messages)
 });
 
-// TODO: replace with something nicer looking idk
-const fallbackThumbnail = new URL(
-    "https://images-ext-1.discordapp.net/external/S4K7rlM4DWPFINDZKKmlrGGi3ULoMG4R6rcwRlQz8LU/%3Ftext%3Dinvalid/https/placehold.jp/42/444/fff/600x400.png"
-);
+// TODO: make thumbnails prettier
+const fallbackThumbnail = new URL("https://images-ext-1.discordapp.net/external/pGTJg3YdSHpyGTltH4vZUKEyQoNzf5mtqbSJs7I4ebc/https/equicord.org/assets/plugins/favoriteAnything/invalid.png");
 
 export async function getThumbnailUrl(data: string, width: number, height: number): Promise<URL | null> {
     try {
@@ -129,7 +107,7 @@ export async function getThumbnailUrl(data: string, width: number, height: numbe
             url: Constants.Endpoints.UNFURL_EMBED_URLS,
             body: { urls: [url] },
             retries: 3
-        }).then(({ body }: { body: UnfurledEmbedsResponse }) => {
+        }).then(({ body }: { body: UnfurledEmbedsResponse; }) => {
             const [{ thumbnail } = {}] = body.embeds;
             return thumbnail?.proxy_url ? new URL(thumbnail.proxy_url) : fallbackThumbnail;
         });
@@ -138,14 +116,28 @@ export async function getThumbnailUrl(data: string, width: number, height: numbe
     }
 }
 
-const Native = VencordNative.pluginHelpers.FavouriteAnything as PluginNative<typeof import("./native")>;
+export const isAllowedHost = proxyLazy(() => {
+    // GLOBAL_ENV is not initialized immediately
+    const allowedHosts = new Set<string>([
+        window.GLOBAL_ENV.CDN_HOST,
+        ...[window.GLOBAL_ENV.IMAGE_PROXY_ENDPOINTS, window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT]
+            .flatMap(endpoint => endpoint.split(","))
+            .map(endpoint => URL.parse(`https://${endpoint}`)?.hostname)
+            .filter(Boolean)
+    ]);
+    return (value: string) => allowedHosts.has(value);
+});
+
 async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
     if (!IS_WEB)
         return Native.fetchAttachment(attachment).then(
             ({ data, filename, type }) => new File([data], filename, { type })
         );
 
-    const { url, content_type, filename } = attachment;
+    const { content_type, filename } = attachment;
+    const url = URL.parse(attachment.url);
+    if (!url || !isAllowedHost(url.hostname)) throw new Error("Invalid URL");
+
     const res = await fetch(url, { headers: { Accept: "*/*" } });
     if (!res.ok) throw new Error("Server error");
 
@@ -161,13 +153,14 @@ const promptToUpload = UploadHandler.promptToUpload as unknown as (
 ) => Promise<void>;
 
 export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
-    const file = await fetchAttachment(attachment).catch(() =>
-        Toasts.show({
-            message: `Couldn't fetch ${attachment.filename}`,
-            id: Toasts.genId(),
-            type: Toasts.Type.FAILURE
-        })
-    );
+    const file = await fetchAttachment(attachment)
+        .catch(() =>
+            Toasts.show({
+                message: `Couldn't fetch ${attachment.filename}`,
+                id: Toasts.genId(),
+                type: Toasts.Type.FAILURE
+            })
+        );
     if (!file) return;
 
     // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
@@ -196,25 +189,6 @@ export async function sendAttachment(attachment: MessageAttachment, channel: Cha
 
 export function hasPermission(permission: bigint, channel: Channel | null): boolean {
     return !!channel && (PermissionStore.can(permission, channel) || channel.isPrivate());
-}
-
-export function useResizeObserver<T extends HTMLElement = HTMLElement>(ref: RefObject<T | null>): number {
-    const [height, setHeight] = useState<number>(0);
-
-    useEffect(() => {
-        if (!ref.current) return;
-
-        const observer = new ResizeObserver(([{ borderBoxSize }]) => {
-            const [{ blockSize }] = borderBoxSize;
-            setHeight(blockSize);
-        });
-
-        observer.observe(ref.current, { box: "border-box" });
-
-        return () => observer.disconnect();
-    }, [ref]);
-
-    return height;
 }
 
 const diacriticsRegex = /[\u0300-\u036f]/g;
@@ -315,8 +289,8 @@ export class BatchedRequestQueue<T> {
 
     constructor(
         private readonly cb: (items: T[]) => Promise<void>,
-        private readonly options: { maxCount: number; timeout?: number }
-    ) {}
+        private readonly options: { maxCount: number; timeout?: number; }
+    ) { }
 
     public add(item: T) {
         if (this.items.indexOf(item) !== -1) return;
@@ -340,7 +314,3 @@ export class BatchedRequestQueue<T> {
         this.queue.push(() => this.cb(batch).catch(() => this.items.push(...batch)));
     }
 }
-
-export const ImageUtils: {
-    isAnimated(image: { src: string; original?: string; animated: boolean; srcIsAnimated?: boolean }): boolean;
-} = findByPropsLazy("isAnimated", "getFormatQuality");

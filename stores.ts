@@ -4,29 +4,21 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { FluxStore } from "@vencord/discord-types";
-import { findStoreLazy, proxyLazyWebpack } from "@webpack";
+import { proxyLazyWebpack } from "@webpack";
 import { Constants, Flux, FluxDispatcher, RestAPI } from "@webpack/common";
 
 import { RefreshedUrlsResponse } from "./types";
-import { BatchedRequestQueue } from "./utils";
+import { BatchedRequestQueue, isAllowedHost } from "./utils";
 
-// Used for storing and automatically refreshing signed CDN/Media proxy urls (https://docs.discord.food/reference#signed-attachment-urls).
+export interface SignedUrlsStoreType {
+    get(url: string): string | null;
+    addSigned(url: string): void;
+}
+
+/** Used for storing and automatically refreshing signed CDN/Media proxy urls ({@link https://docs.discord.food/reference#signed-attachment-urls}). */
 export const SignedUrlsStore = proxyLazyWebpack(() => {
-    interface Store {
-        get(url: string): string | null;
-        addSigned(url: string): void;
-    }
-
-    class SignedUrlsStore extends Flux.Store implements Store {
+    class SignedUrlsStoreClass extends Flux.Store implements SignedUrlsStoreType {
         private static readonly _expirationThreshold = 60 * 60 * 1000;
-        private static readonly _allowedHosts = new Set<string>([
-            window.GLOBAL_ENV.CDN_HOST,
-            ...[window.GLOBAL_ENV.IMAGE_PROXY_ENDPOINTS, window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT]
-                .flatMap(endpoint => endpoint.split(","))
-                .map(endpoint => URL.parse(`https://${endpoint}`)?.host)
-                .filter(Boolean)
-        ]);
 
         private _urls = new Map<string, string>();
         private _queue = new BatchedRequestQueue<string>(batch => this._handleBatch(batch), {
@@ -70,12 +62,12 @@ export const SignedUrlsStore = proxyLazyWebpack(() => {
         }
 
         private _isValid(url: URL | null): url is URL {
-            return !!(url && SignedUrlsStore._allowedHosts.has(url.host));
+            return !!(url && isAllowedHost(url.hostname));
         }
 
         private _willExpire(url: URL): boolean {
             const expiryTimestamp = parseInt(url.searchParams.get("ex")!, 16) * 1000;
-            return isNaN(expiryTimestamp) || expiryTimestamp - SignedUrlsStore._expirationThreshold < Date.now();
+            return isNaN(expiryTimestamp) || expiryTimestamp - SignedUrlsStoreClass._expirationThreshold < Date.now();
         }
 
         private _update(urls: [string, string][]): void {
@@ -96,17 +88,11 @@ export const SignedUrlsStore = proxyLazyWebpack(() => {
                 url: Constants.Endpoints.ATTACHMENTS_REFRESH_URLS,
                 body: { attachment_urls: batch },
                 retries: 3
-            }).then(({ body }: { body: RefreshedUrlsResponse }) =>
+            }).then(({ body }: { body: RefreshedUrlsResponse; }) =>
                 this._update(body.refreshed_urls.map(({ original, refreshed }) => [original, refreshed!]))
             );
         }
     }
 
-    return new SignedUrlsStore(FluxDispatcher) as Store;
+    return new SignedUrlsStoreClass(FluxDispatcher) as SignedUrlsStoreType;
 });
-
-interface PendingReplyStore extends FluxStore {
-    getPendingReply: (channelId: string) => unknown;
-}
-
-export const PendingReplyStore: PendingReplyStore = findStoreLazy("PendingReplyStore");

@@ -16,7 +16,7 @@ import { ComponentProps, ComponentType, ReactNode, Ref } from "react";
 import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, FullMessageAttachment, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
-import { cl, defs, hasPermission, ImageUtils, sendAttachment, useFavourites, useListScroller, useResizeObserver } from "./utils";
+import { cl, defs, hasPermission, ImageUtils, sendAttachment, useFavourites, useImageFavourites, useListScroller, useResizeObserver } from "./utils";
 
 const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
@@ -26,6 +26,7 @@ const createChannelRecordFromServer = findByCodeLazy(".GUILD_TEXT]", "fromServer
 const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
 
 const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
+const ScrollerClasses = findCssClassesLazy("thin", "scrollerBase", "fade");
 
 const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight" | "ref"> & {
@@ -144,6 +145,93 @@ export function FilePicker({ onSelectItem }: FilePickerProps) {
     );
 }
 
+const IMAGE_GUTTER = 12;
+
+function computeImageLayout(items: { width: number; height: number; }[], containerWidth: number) {
+    // Discord's GIF tab uses absolute positioning for its grid rather than CSS columns
+    // column count and item dimensions were reverse-engineered from the DOM. Items are placed into whichever
+    // column has the smallest accumulated height matching Discord's "shortest-column-first" logic
+    const cols = Math.max(2, Math.round(containerWidth / 230));
+    const colWidth = (containerWidth - IMAGE_GUTTER * (cols + 1)) / cols;
+    const colTops = Array<number>(cols).fill(IMAGE_GUTTER);
+    return items.map(item => {
+        const col = colTops.indexOf(Math.min(...colTops));
+        const itemHeight = Math.round((item.height / item.width) * colWidth);
+        const layout = {
+            left: IMAGE_GUTTER + col * (colWidth + IMAGE_GUTTER),
+            top: colTops[col],
+            width: colWidth,
+            height: itemHeight,
+        };
+        colTops[col] += itemHeight + IMAGE_GUTTER;
+        return layout;
+    });
+}
+
+export function ImagePicker({ onSelectItem }: FilePickerProps) {
+    const { query } = ExpressionPickerStore.useExpressionPickerStore(store => ({
+        query: store.searchQuery
+    }));
+
+    const favs = useImageFavourites(query);
+    const count = useMemo(() => favs?.length ?? 0, [favs]);
+
+    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), []);
+
+    const scrollerRef = useRef<HTMLDivElement>(null);
+    const [containerWidth, setContainerWidth] = useState(496);
+    useResizeObserver(scrollerRef, ({ width }) => setContainerWidth(width), []);
+
+    const layout = useMemo(
+        () => (favs ? computeImageLayout(favs, containerWidth) : []),
+        [favs, containerWidth]
+    );
+
+    const totalHeight = useMemo(
+        () => layout.length === 0 ? 0 : Math.max(...layout.map(item => item.top + item.height)) + IMAGE_GUTTER,
+        [layout]
+    );
+
+    return (
+        <div id="image-picker-tab-panel" role="tabpanel" aria-labelledby="image-picker-tab" className={cl("container")}>
+            <div className={cl("container-header")}>
+                <ManaSearchBar
+                    autoFocus
+                    placeholder="Search images"
+                    query={query}
+                    onChange={query => ExpressionPickerStore.setSearchQuery(query)}
+                    onClear={() => ExpressionPickerStore.setSearchQuery("")}
+                />
+            </div>
+            {count > 0 ? (
+                <div style={{ width: "100%", height: "100%", display: "flex" }}>
+                    <div ref={scrollerRef} className={`${ScrollerClasses.thin} ${ScrollerClasses.scrollerBase} ${ScrollerClasses.fade} ${cl("image-results")}`}>
+                        <div className={cl("image-content")} style={{ height: totalHeight }}>
+                            <div className={cl("image-inner")}>
+                                {favs!.map((item, i) => (
+                                    <ImagePickerItem
+                                        key={item.url}
+                                        url={item.url}
+                                        src={item.src}
+                                        width={item.width}
+                                        height={item.height}
+                                        layout={layout[i]}
+                                        onSubmit={handleSubmit}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className={cl("container-body", "container-info")} inert>
+                    <BaseText className={cl("info-text")}>No images match your search.</BaseText>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function EmptyList() {
     return <BaseText className={cl("info-text")}>No files match your search.</BaseText>;
 }
@@ -227,6 +315,39 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
                     <SendIcon size="refresh_sm" color="currentColor" />
                 </Button>
             )}
+        </div>
+    );
+}
+
+export function ImagePickerItem({ url, src, width, height, layout, onSubmit }: { url: string; src: string; width: number; height: number; layout?: { left: number; top: number; width: number; height: number; }; onSubmit: (url: string) => void; }) {
+    useEffect(() => {
+        SignedUrlsStore.addSigned(url);
+        SignedUrlsStore.addSigned(src);
+    }, [url, src]);
+
+    const resolvedSrc = useStateFromStores(
+        [SignedUrlsStore],
+        () => SignedUrlsStore.get(src) ?? SignedUrlsStore.get(url) ?? src,
+        [src, url]
+    );
+
+    return (
+        <div
+            className={cl("image-result")}
+            role="button"
+            tabIndex={-1}
+            style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}
+            onClick={() => onSubmit(url)}
+        >
+            <img src={resolvedSrc} alt="" className={cl("image-gif")} draggable={false} />
+            <FavoriteButton
+                className={`${Classes.gifFavoriteButton} ${cl("image-fav-button")}`}
+                format={FavouriteItemFormat.IMAGE}
+                url={url}
+                src={resolvedSrc}
+                width={width}
+                height={height}
+            />
         </div>
     );
 }

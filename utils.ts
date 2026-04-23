@@ -263,6 +263,51 @@ export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string
     return state;
 }
 
+function filterImageItems(items: Record<string, FavouriteItem> | null, query?: string) {
+    if (!items) return null;
+
+    const validItems = Object.entries(items)
+        .map(([url, item]) => ({ ...item, url }))
+        .filter(({ format, src, url }) =>
+            format === FavouriteItemFormat.IMAGE &&
+            !ImageUtils.isAnimated({
+                original: url,
+                src,
+                animated: false
+            })
+        );
+
+    if (!query) return validItems.sort((a, b) => b.order - a.order);
+
+    return validItems
+        .map(item => ({
+            item,
+            score: fuzzySearch(query, normalize(item.url))
+        }))
+        .filter(({ score }) => score !== null)
+        .sort((a, b) => b.score! - a.score!)
+        .map(({ item }) => item);
+}
+
+export function useImageFavourites(searchQuery?: string) {
+    useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
+
+    const { state } = useStateFromStores(
+        [UserSettingsProtoStore],
+        () => {
+            const query = searchQuery && normalize(searchQuery);
+            const items: Record<string, FavouriteItem> | null =
+                UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
+
+            return { query, state: filterImageItems(items, query) };
+        },
+        [searchQuery],
+        (prev, next) => !!prev.state === !!next.state && prev.query === next.query
+    );
+
+    return state;
+}
+
 // Helper hook for the ListScroller component, similar utility is used in the forum channel list view
 // for keeping track of the individual row heights
 export function useListScroller() {

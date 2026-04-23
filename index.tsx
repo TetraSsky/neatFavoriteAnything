@@ -11,11 +11,11 @@ import { proxyLazyWebpack } from "@webpack";
 import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
-import { AttachmentAccessory, EmbedAccessory, FilePicker } from "./components";
+import { AttachmentAccessory, EmbedAccessory, FilePicker, ImagePicker } from "./components";
 import { SignedUrlsStore } from "./stores";
 import managedStyle from "./style.css?managed";
 import { AttachmentItem, EmbedComponent, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat, FullEmbed } from "./types";
-import { getThumbnailUrl } from "./utils";
+import { getThumbnailUrl, ImageUtils } from "./utils";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | FullEmbed>(null));
 export const EmbedMosaicContext = proxyLazyWebpack(() => React.createContext<null | number>(null));
@@ -115,6 +115,16 @@ export default definePlugin({
                     Media
                 </Tab>
                 <Tab
+                    id="image-picker-tab"
+                    key="image-picker-tab"
+                    aria-controls="image-picker-tab-panel"
+                    aria-selected={activeView === ExpressionPickerView.IMAGE}
+                    isActive={activeView === ExpressionPickerView.IMAGE}
+                    viewType={ExpressionPickerView.IMAGE}
+                >
+                    Image
+                </Tab>
+                <Tab
                     id="files-picker-tab"
                     key="files-picker-tab"
                     aria-controls="files-picker-tab-panel"
@@ -128,7 +138,15 @@ export default definePlugin({
         );
     },
     renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void) {
-        return activeView === ExpressionPickerView.FILES ? <FilePicker onSelectItem={onSelectGIF} /> : null;
+        if (activeView === ExpressionPickerView.IMAGE) {
+            return <ImagePicker onSelectItem={onSelectGIF} />;
+        }
+
+        if (activeView === ExpressionPickerView.FILES) {
+            return <FilePicker onSelectItem={onSelectGIF} />;
+        }
+
+        return null;
     },
     renderAttachment(children: ReactNode, props: { item: AttachmentItem; }) {
         return <AttachmentContext.Provider value={props.item}>{children}</AttachmentContext.Provider>;
@@ -141,7 +159,16 @@ export default definePlugin({
     },
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,
-    filterGifs: (item: FavouriteItem) => item.format !== FavouriteItemFormat.NONE,
+    filterGifs: (item: FavouriteItem & { url?: string; }) => {
+        if (item.format === FavouriteItemFormat.NONE) return false;
+        if (item.format !== FavouriteItemFormat.IMAGE) return true;
+
+        return ImageUtils.isAnimated({
+            original: item.url,
+            src: item.src,
+            animated: false
+        });
+    },
     interceptAddToFavourites: async (item: FavouriteItem & { url: string; }) => {
         if (item.format !== FavouriteItemFormat.NONE) return item;
 

@@ -11,6 +11,7 @@ import { JsonValue, PartialDeep } from "type-fest";
 export enum ExpressionPickerView {
     EMOJI = "emoji",
     GIF = "gif",
+    IMAGE = "image",
     STICKER = "sticker",
     SOUNDBOARD = "soundboard",
     FILES = "files"

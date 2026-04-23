@@ -27,6 +27,7 @@ const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForM
 
 const Classes = findCssClassesLazy("gifFavoriteButton", "ctaButtonContainer");
 const ScrollerClasses = findCssClassesLazy("thin", "scrollerBase", "fade");
+const GifPickerClasses = findCssClassesLazy("result", "endContainer");
 
 const ListScroller = ListScrollerThin as ComponentType<
     Omit<ComponentProps<typeof ListScrollerThin>, "rowHeight" | "ref"> & {
@@ -187,10 +188,14 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
         [favs, containerWidth]
     );
 
-    const totalHeight = useMemo(
-        () => layout.length === 0 ? 0 : Math.max(...layout.map(item => item.top + item.height)) + IMAGE_GUTTER,
+    const IMAGE_END_CONTAINER_HEIGHT = 220;
+
+    const itemsBottom = useMemo(
+        () => layout.length === 0 ? IMAGE_GUTTER : Math.max(...layout.map(item => item.top + item.height)) + IMAGE_GUTTER,
         [layout]
     );
+
+    const totalHeight = itemsBottom + IMAGE_END_CONTAINER_HEIGHT + IMAGE_GUTTER;
 
     return (
         <div id="image-picker-tab-panel" role="tabpanel" aria-labelledby="image-picker-tab" className={cl("container")}>
@@ -204,7 +209,7 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
                 />
             </div>
             {count > 0 ? (
-                <div style={{ width: "100%", height: "100%", display: "flex" }}>
+                <div style={{ flex: "1", minHeight: "0", display: "flex" }}>
                     <div ref={scrollerRef} className={`${ScrollerClasses.thin} ${ScrollerClasses.scrollerBase} ${ScrollerClasses.fade} ${cl("image-results")}`}>
                         <div className={cl("image-content")} style={{ height: totalHeight }}>
                             <div className={cl("image-inner")}>
@@ -219,6 +224,9 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
                                         onSubmit={handleSubmit}
                                     />
                                 ))}
+                            </div>
+                            <div style={{ position: "absolute", left: 0, width: "100%", top: itemsBottom, height: IMAGE_END_CONTAINER_HEIGHT + IMAGE_GUTTER }}>
+                                <div className={GifPickerClasses.endContainer} style={{ position: "sticky", left: IMAGE_GUTTER, width: `calc(100% - ${IMAGE_GUTTER}px)`, top: 0, height: IMAGE_END_CONTAINER_HEIGHT }} />
                             </div>
                         </div>
                     </div>

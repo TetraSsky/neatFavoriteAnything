@@ -26,6 +26,7 @@ export default definePlugin({
     description: "Favourite any image, video, or file attachment",
     authors: [Devs.nin0dev, { name: "Davri", id: 457579346282938368n }],
     managedStyle,
+    capturedGifSelect: null as null | ((item: { url: string; }) => void),
     patches: [
         // EMBEDS
         {
@@ -84,6 +85,15 @@ export default definePlugin({
             ]
         },
         {
+            // Capture inner picker's "handleSelectGIF" callback so image can go through
+            // the same interception path used by native GIF selection (GifPaste patch)
+            find: "handleSelectGIF=",
+            replacement: {
+                match: /onSelectGIF:this\.handleSelectGIF/,
+                replace: "onSelectGIF:$self.captureHandleSelectGIF(this.handleSelectGIF)"
+            }
+        },
+        {
             // Hide favourite files from the GIFs/Media tab
             find: '.sortBy("order").reverse().value()',
             replacement: {
@@ -139,7 +149,7 @@ export default definePlugin({
     },
     renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void) {
         if (activeView === ExpressionPickerView.IMAGE) {
-            return <ImagePicker onSelectItem={onSelectGIF} />;
+            return <ImagePicker onSelectItem={item => this.handleSelectImage(item, onSelectGIF)} />;
         }
 
         if (activeView === ExpressionPickerView.FILES) {
@@ -147,6 +157,19 @@ export default definePlugin({
         }
 
         return null;
+    },
+    captureHandleSelectGIF(handler: (item: { url: string; }) => void) {
+        this.capturedGifSelect = handler;
+        return handler;
+    },
+    handleSelectImage(item: { url: string; }, onSelectGIF: (item: { url: string; }) => void) {
+        const handle = this.capturedGifSelect;
+        // Fallback to the GIF handler if not captured
+        if (handle) {
+            handle(item);
+        } else {
+            onSelectGIF(item);
+        }
     },
     renderAttachment(children: ReactNode, props: { item: AttachmentItem; }) {
         return <AttachmentContext.Provider value={props.item}>{children}</AttachmentContext.Provider>;

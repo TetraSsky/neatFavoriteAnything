@@ -270,11 +270,70 @@ function filterImageItems(items: Record<string, FavouriteItem> | null, query?: s
         .map(([url, item]) => ({ ...item, url }))
         .filter(({ format, src, url }) =>
             format === FavouriteItemFormat.IMAGE &&
-            !ImageUtils.isAnimated({
-                original: url,
-                src,
-                animated: false
-            })
+            !isMediaItem({ format, src, url, width: 0, height: 0, order: 0 })
+        );
+
+    if (!query) return validItems.sort((a, b) => b.order - a.order);
+
+    return validItems
+        .map(item => ({
+            item,
+            score: fuzzySearch(query, normalize(item.url))
+        }))
+        .filter(({ score }) => score !== null)
+        .sort((a, b) => b.score! - a.score!)
+        .map(({ item }) => item);
+}
+
+export function isMediaItem(item: FavouriteItem & { url?: string; }) {
+    if (item.format === FavouriteItemFormat.NONE) return false;
+
+    return ImageUtils.isAnimated({
+        original: item.url,
+        src: item.src,
+        animated: false
+    });
+}
+
+const EXTERNAL_VIDEO_MARKER = "#vc-favouriteAnything-video";
+
+export function isDirectVideoFile(raw: string) {
+    const parsed = URL.parse(raw);
+    if (!parsed) return false;
+
+    return /\.(mp4|webm|mov|m4v|mkv|avi|wmv|flv)$/i.test(parsed.pathname.toLowerCase());
+}
+
+export function markExternalVideoSrc(raw: string) {
+    const parsed = URL.parse(raw);
+    if (!parsed) return raw;
+    if (parsed.hash === EXTERNAL_VIDEO_MARKER) return raw;
+
+    parsed.hash = EXTERNAL_VIDEO_MARKER;
+    return `${parsed}`;
+}
+
+export function hasExternalVideoMarker(raw: string) {
+    return URL.parse(raw)?.hash === EXTERNAL_VIDEO_MARKER;
+}
+
+export function stripExternalVideoMarker(raw: string) {
+    const parsed = URL.parse(raw);
+    if (!parsed || parsed.hash !== EXTERNAL_VIDEO_MARKER) return raw;
+
+    parsed.hash = "";
+    return `${parsed}`;
+}
+
+function filterVideoItems(items: Record<string, FavouriteItem> | null, query?: string) {
+    if (!items) return null;
+
+    const validItems = Object.entries(items)
+        .map(([url, item]) => ({ ...item, url }))
+        .filter(({ format, src, url }) =>
+            format === FavouriteItemFormat.VIDEO &&
+            !isMediaItem({ format, src, url, width: 0, height: 0, order: 0 }) &&
+            (isDirectVideoFile(url) || hasExternalVideoMarker(src))
         );
 
     if (!query) return validItems.sort((a, b) => b.order - a.order);
@@ -307,6 +366,69 @@ export function useImageFavourites(searchQuery?: string) {
 
     return state;
 }
+
+export function useVideoFavourites(searchQuery?: string) {
+    useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
+
+    const { state } = useStateFromStores(
+        [UserSettingsProtoStore],
+        () => {
+            const query = searchQuery && normalize(searchQuery);
+            const items: Record<string, FavouriteItem> | null =
+                UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
+
+            return { query, state: filterVideoItems(items, query) };
+        },
+        [searchQuery],
+        (prev, next) => !!prev.state === !!next.state && prev.query === next.query
+    );
+
+    return state;
+}
+
+function getFavouriteItemsRecord() {
+    return UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs as Record<string, FavouriteItem> | null;
+}
+
+export function getFavouriteItemsSnapshot() {
+    const items = getFavouriteItemsRecord();
+    if (!items) return [];
+
+    return Object.entries(items)
+        .map(([url, item]) => ({ url, ...item }))
+        .map(item => {
+            const animated = item.format !== FavouriteItemFormat.NONE && ImageUtils.isAnimated({
+                original: item.url,
+                src: item.src,
+                animated: false
+            });
+
+            return {
+                url: item.url,
+                src: item.src,
+                format: item.format,
+                width: item.width,
+                height: item.height,
+                order: item.order,
+                keys: Object.keys(item),
+                animated,
+                isDirectVideoFile: isDirectVideoFile(item.url),
+                hasExternalVideoMarker: hasExternalVideoMarker(item.src),
+                inMediaTab: isMediaItem(item),
+                inImageTab: item.format === FavouriteItemFormat.IMAGE && !isMediaItem(item),
+                inVideoTab: item.format === FavouriteItemFormat.VIDEO &&
+                    !isMediaItem(item) &&
+                    (isDirectVideoFile(item.url) || hasExternalVideoMarker(item.src))
+            };
+        })
+        .sort((a, b) => b.order - a.order);
+}
+
+const debugWindow = window as Window & typeof globalThis & {
+    __favAnythingDump?: () => ReturnType<typeof getFavouriteItemsSnapshot>;
+};
+
+debugWindow.__favAnythingDump = () => getFavouriteItemsSnapshot();
 
 // Helper hook for the ListScroller component, similar utility is used in the forum channel list view
 // for keeping track of the individual row heights

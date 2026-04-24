@@ -11,11 +11,11 @@ import { proxyLazyWebpack } from "@webpack";
 import { React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
-import { AttachmentAccessory, EmbedAccessory, FilePicker, ImagePicker } from "./components";
+import { AttachmentAccessory, EmbedAccessory, FilePicker, ImagePicker, VideoPicker } from "./components";
 import { SignedUrlsStore } from "./stores";
 import managedStyle from "./style.css?managed";
 import { AttachmentItem, EmbedComponent, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat, FullEmbed } from "./types";
-import { getThumbnailUrl, ImageUtils } from "./utils";
+import { getThumbnailUrl, isMediaItem } from "./utils";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | FullEmbed>(null));
 export const EmbedMosaicContext = proxyLazyWebpack(() => React.createContext<null | number>(null));
@@ -135,6 +135,16 @@ export default definePlugin({
                     Image
                 </Tab>
                 <Tab
+                    id="video-picker-tab"
+                    key="video-picker-tab"
+                    aria-controls="video-picker-tab-panel"
+                    aria-selected={activeView === ExpressionPickerView.VIDEO}
+                    isActive={activeView === ExpressionPickerView.VIDEO}
+                    viewType={ExpressionPickerView.VIDEO}
+                >
+                    Video
+                </Tab>
+                <Tab
                     id="files-picker-tab"
                     key="files-picker-tab"
                     aria-controls="files-picker-tab-panel"
@@ -150,6 +160,10 @@ export default definePlugin({
     renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void) {
         if (activeView === ExpressionPickerView.IMAGE) {
             return <ImagePicker onSelectItem={item => this.handleSelectImage(item, onSelectGIF)} />;
+        }
+
+        if (activeView === ExpressionPickerView.VIDEO) {
+            return <VideoPicker onSelectItem={item => this.handleSelectImage(item, onSelectGIF)} />;
         }
 
         if (activeView === ExpressionPickerView.FILES) {
@@ -183,14 +197,7 @@ export default definePlugin({
     renderAttachmentAccessory: () => <AttachmentAccessory />,
     renderEmbedAccessory: () => <EmbedAccessory />,
     filterGifs: (item: FavouriteItem & { url?: string; }) => {
-        if (item.format === FavouriteItemFormat.NONE) return false;
-        if (item.format !== FavouriteItemFormat.IMAGE) return true;
-
-        return ImageUtils.isAnimated({
-            original: item.url,
-            src: item.src,
-            animated: false
-        });
+        return isMediaItem(item);
     },
     interceptAddToFavourites: async (item: FavouriteItem & { url: string; }) => {
         if (item.format !== FavouriteItemFormat.NONE) return item;

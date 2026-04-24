@@ -16,7 +16,7 @@ import { ComponentProps, ComponentType, ReactNode, Ref } from "react";
 import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, FullMessageAttachment, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
-import { cl, defs, hasPermission, ImageUtils, sendAttachment, useFavourites, useImageFavourites, useListScroller, useResizeObserver } from "./utils";
+import { cl, defs, hasPermission, ImageUtils, isDirectVideoFile, markExternalVideoSrc, sendAttachment, stripExternalVideoMarker, useFavourites, useImageFavourites, useListScroller, useResizeObserver, useVideoFavourites } from "./utils";
 
 const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
@@ -240,6 +240,77 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
     );
 }
 
+export function VideoPicker({ onSelectItem }: FilePickerProps) {
+    const { query } = ExpressionPickerStore.useExpressionPickerStore(store => ({
+        query: store.searchQuery
+    }));
+
+    const favs = useVideoFavourites(query);
+    const count = useMemo(() => favs?.length ?? 0, [favs]);
+
+    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), []);
+
+    const scrollerRef = useRef<HTMLDivElement>(null);
+    const [containerWidth, setContainerWidth] = useState(496);
+    useResizeObserver(scrollerRef, ({ width }) => setContainerWidth(width), []);
+
+    const layout = useMemo(
+        () => (favs ? computeImageLayout(favs, containerWidth) : []),
+        [favs, containerWidth]
+    );
+
+    const VIDEO_END_CONTAINER_HEIGHT = 220;
+
+    const itemsBottom = useMemo(
+        () => layout.length === 0 ? IMAGE_GUTTER : Math.max(...layout.map(item => item.top + item.height)) + IMAGE_GUTTER,
+        [layout]
+    );
+
+    const totalHeight = itemsBottom + VIDEO_END_CONTAINER_HEIGHT + IMAGE_GUTTER;
+
+    return (
+        <div id="video-picker-tab-panel" role="tabpanel" aria-labelledby="video-picker-tab" className={cl("container")}>
+            <div className={cl("container-header")}>
+                <ManaSearchBar
+                    autoFocus
+                    placeholder="Search videos"
+                    query={query}
+                    onChange={query => ExpressionPickerStore.setSearchQuery(query)}
+                    onClear={() => ExpressionPickerStore.setSearchQuery("")}
+                />
+            </div>
+            {count > 0 ? (
+                <div style={{ flex: "1", minHeight: "0", display: "flex" }}>
+                    <div ref={scrollerRef} className={`${ScrollerClasses.thin} ${ScrollerClasses.scrollerBase} ${ScrollerClasses.fade} ${cl("image-results")}`}>
+                        <div className={cl("image-content")} style={{ height: totalHeight }}>
+                            <div className={cl("image-inner")}>
+                                {favs!.map((item, i) => (
+                                    <VideoPickerItem
+                                        key={item.url}
+                                        url={item.url}
+                                        src={item.src}
+                                        width={item.width}
+                                        height={item.height}
+                                        layout={layout[i]}
+                                        onSubmit={handleSubmit}
+                                    />
+                                ))}
+                            </div>
+                            <div style={{ position: "absolute", left: 0, width: "100%", top: itemsBottom, height: VIDEO_END_CONTAINER_HEIGHT + IMAGE_GUTTER }}>
+                                <div className={GifPickerClasses.endContainer} style={{ position: "sticky", left: IMAGE_GUTTER, width: `calc(100% - ${IMAGE_GUTTER}px)`, top: 0, height: VIDEO_END_CONTAINER_HEIGHT }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className={cl("container-body", "container-info")} inert>
+                    <BaseText className={cl("info-text")}>No videos match your search.</BaseText>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function EmptyList() {
     return <BaseText className={cl("info-text")}>No files match your search.</BaseText>;
 }
@@ -360,6 +431,46 @@ export function ImagePickerItem({ url, src, width, height, layout, onSubmit }: {
     );
 }
 
+export function VideoPickerItem({ url, src, width, height, layout, onSubmit }: { url: string; src: string; width: number; height: number; layout?: { left: number; top: number; width: number; height: number; }; onSubmit: (url: string) => void; }) {
+    useEffect(() => {
+        SignedUrlsStore.addSigned(url);
+        SignedUrlsStore.addSigned(src);
+    }, [url, src]);
+
+    const resolvedSrc = useStateFromStores(
+        [SignedUrlsStore],
+        () => SignedUrlsStore.get(src) ?? SignedUrlsStore.get(url) ?? src,
+        [src, url]
+    );
+
+    const cleanResolvedSrc = stripExternalVideoMarker(resolvedSrc);
+    const isDirectVideo = [cleanResolvedSrc, url].some(isDirectVideoFile);
+
+    return (
+        <div
+            className={cl("image-result")}
+            role="button"
+            tabIndex={-1}
+            style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}
+            onClick={() => onSubmit(url)}
+        >
+            {isDirectVideo ? (
+                <video src={cleanResolvedSrc} className={cl("image-gif")} draggable={false} autoPlay muted loop playsInline preload="metadata" />
+            ) : (
+                <img src={cleanResolvedSrc} alt="" className={cl("image-gif")} draggable={false} />
+            )}
+            <FavoriteButton
+                className={`${Classes.gifFavoriteButton} ${cl("image-fav-button")}`}
+                format={FavouriteItemFormat.VIDEO}
+                url={url}
+                src={cleanResolvedSrc}
+                width={width}
+                height={height}
+            />
+        </div>
+    );
+}
+
 export function EmbedAccessory() {
     const embed = React.useContext(EmbedContext);
     const mosaicIndex = React.useContext(EmbedMosaicContext);
@@ -375,12 +486,17 @@ export function EmbedAccessory() {
 
             // External videos don't have a video.proxyURL property that could be used for the preview - use the static thumbnail instead
             const src = video.proxyURL ?? thumbnail?.proxyURL ?? video.url;
-            const format = isProxiedVideo ? FavouriteItemFormat.VIDEO : FavouriteItemFormat.IMAGE;
 
             // External videos' content.url usually doesn't point to a valid resource that could be embedded
             const url = !isProxiedVideo ? embed.url! : video.url;
+            const shouldMarkExternal = !isDirectVideoFile(url);
 
-            return { ...video, format, src, url };
+            return {
+                ...video,
+                format: FavouriteItemFormat.VIDEO,
+                src: shouldMarkExternal ? markExternalVideoSrc(src) : src,
+                url
+            };
         }
 
         const img = (mosaicIndex != null && images?.[mosaicIndex]) || image;

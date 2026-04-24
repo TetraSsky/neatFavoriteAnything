@@ -12,6 +12,7 @@ export enum ExpressionPickerView {
     EMOJI = "emoji",
     GIF = "gif",
     IMAGE = "image",
+    VIDEO = "video",
     STICKER = "sticker",
     SOUNDBOARD = "soundboard",
     FILES = "files"

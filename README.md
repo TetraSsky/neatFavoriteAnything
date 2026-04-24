@@ -47,7 +47,7 @@ You're now ready to use nin0FavoriteAnything, on your browser (same, be sure to 
 ## Screenshots
 <table>
   <tr>
-    <td width="100%"><img src="https://github.com/user-attachments/assets/41541edd-61e3-491a-9975-254a3db2d2f6" alt="Context menu" style="width:100%"></td>
+    <td width="50%"><img src="https://github.com/user-attachments/assets/41541edd-61e3-491a-9975-254a3db2d2f6" alt="Context menu" style="width:100%"></td>
   </tr>
   <tr>
     <td width="50%"><img src="https://github.com/user-attachments/assets/6d502f44-d106-42a0-9b77-c4b493fb78b5" alt="Empty Image Tab" style="width:100%"></td>

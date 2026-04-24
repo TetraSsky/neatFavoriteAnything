@@ -156,6 +156,19 @@ const promptToUpload = UploadHandler.promptToUpload as unknown as (
     ...args: Parameters<typeof UploadHandler.promptToUpload>
 ) => Promise<void>;
 
+function applyTitleToFilename(title: string, originalFilename: string) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return originalFilename;
+
+    const originalExt = /\.[^./\\]+$/.exec(originalFilename)?.[0] ?? "";
+    if (!originalExt) return trimmedTitle;
+
+    // Append the original extension unless the title already ends with it
+    return trimmedTitle.toLowerCase().endsWith(originalExt.toLowerCase())
+        ? trimmedTitle
+        : `${trimmedTitle}${originalExt}`;
+}
+
 export async function sendAttachment(attachment: FullMessageAttachment, channel: Channel) {
     const { filename, title, description } = attachment;
     const file = await fetchAttachment(attachment).catch(() =>
@@ -177,7 +190,7 @@ export async function sendAttachment(attachment: FullMessageAttachment, channel:
     const [upload] = uploads.splice(uploadIdx);
     UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
     // Empty titles and descriptions are allowed
-    if (title != null) upload.filename = title;
+    if (title != null) upload.filename = applyTitleToFilename(title, filename);
     if (description != null) upload.description = description;
 
     FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });

@@ -490,11 +490,12 @@ export function EmbedAccessory() {
             // External videos' content.url usually doesn't point to a valid resource that could be embedded
             const url = !isProxiedVideo ? embed.url! : video.url;
             const shouldMarkExternal = !isDirectVideoFile(url);
+            const previewSrc = shouldMarkExternal ? (thumbnail?.proxyURL ?? src) : src;
 
             return {
                 ...video,
                 format: FavouriteItemFormat.VIDEO,
-                src: shouldMarkExternal ? markExternalVideoSrc(src) : src,
+                src: shouldMarkExternal ? markExternalVideoSrc(previewSrc) : previewSrc,
                 url
             };
         }

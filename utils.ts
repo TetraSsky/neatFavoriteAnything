@@ -399,49 +399,50 @@ export function useVideoFavourites(searchQuery?: string) {
     return state;
 }
 
-function getFavouriteItemsRecord() {
-    return UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs as Record<string, FavouriteItem> | null;
-}
+// Debug utility - COMMENTED OUT BY DEFAULT
+// function getFavouriteItemsRecord() {
+//     return UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs as Record<string, FavouriteItem> | null;
+// }
 
-export function getFavouriteItemsSnapshot() {
-    const items = getFavouriteItemsRecord();
-    if (!items) return [];
+// export function getFavouriteItemsSnapshot() {
+//     const items = getFavouriteItemsRecord();
+//     if (!items) return [];
 
-    return Object.entries(items)
-        .map(([url, item]) => ({ url, ...item }))
-        .map(item => {
-            const animated = item.format !== FavouriteItemFormat.NONE && ImageUtils.isAnimated({
-                original: item.url,
-                src: item.src,
-                animated: false
-            });
+//     return Object.entries(items)
+//         .map(([url, item]) => ({ url, ...item }))
+//         .map(item => {
+//             const animated = item.format !== FavouriteItemFormat.NONE && ImageUtils.isAnimated({
+//                 original: item.url,
+//                 src: item.src,
+//                 animated: false
+//             });
 
-            return {
-                url: item.url,
-                src: item.src,
-                format: item.format,
-                width: item.width,
-                height: item.height,
-                order: item.order,
-                keys: Object.keys(item),
-                animated,
-                isDirectVideoFile: isDirectVideoFile(item.url),
-                hasExternalVideoMarker: hasExternalVideoMarker(item.src),
-                inMediaTab: isMediaItem(item),
-                inImageTab: item.format === FavouriteItemFormat.IMAGE && !isMediaItem(item),
-                inVideoTab: item.format === FavouriteItemFormat.VIDEO &&
-                    !isMediaItem(item) &&
-                    (isDirectVideoFile(item.url) || hasExternalVideoMarker(item.src))
-            };
-        })
-        .sort((a, b) => b.order - a.order);
-}
+//             return {
+//                 url: item.url,
+//                 src: item.src,
+//                 format: item.format,
+//                 width: item.width,
+//                 height: item.height,
+//                 order: item.order,
+//                 keys: Object.keys(item),
+//                 animated,
+//                 isDirectVideoFile: isDirectVideoFile(item.url),
+//                 hasExternalVideoMarker: hasExternalVideoMarker(item.src),
+//                 inMediaTab: isMediaItem(item),
+//                 inImageTab: item.format === FavouriteItemFormat.IMAGE && !isMediaItem(item),
+//                 inVideoTab: item.format === FavouriteItemFormat.VIDEO &&
+//                     !isMediaItem(item) &&
+//                     (isDirectVideoFile(item.url) || hasExternalVideoMarker(item.src))
+//             };
+//         })
+//         .sort((a, b) => b.order - a.order);
+// }
 
-const debugWindow = window as Window & typeof globalThis & {
-    __favAnythingDump?: () => ReturnType<typeof getFavouriteItemsSnapshot>;
-};
+// const debugWindow = window as Window & typeof globalThis & {
+//     __favAnythingDump?: () => ReturnType<typeof getFavouriteItemsSnapshot>;
+// };
 
-debugWindow.__favAnythingDump = () => getFavouriteItemsSnapshot();
+// debugWindow.__favAnythingDump = () => getFavouriteItemsSnapshot();
 
 // Helper hook for the ListScroller component, similar utility is used in the forum channel list view
 // for keeping track of the individual row heights

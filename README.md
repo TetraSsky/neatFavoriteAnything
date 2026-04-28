@@ -1,4 +1,4 @@
-# ⚠️⚠️⚠️ THIS PLUGIN IS NOT MINE ! PLEASE REFER TO THE ORIGINAL AUTHORS [Davri](https://github.com/Davr1) AND [nin0-dev](https://github.com/nin0-dev) ! ⚠️⚠️⚠️
+# ⚠️⚠️⚠️ THIS PLUGIN IS NOT MINE ! PLEASE REFER TO THE ORIGINAL AUTHORS [Davri](https://github.com/Davr1) AND [nin0-dev](https://git.nin0.dev/nin0) ! ⚠️⚠️⚠️
 
 # ❤️ THE ORIGINAL REPOSITORY CAN BE FOUND HERE : https://git.nin0.dev/userplugins/favouriteAnything ❤️
 

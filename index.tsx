@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ChatBarProps } from "@api/ChatButtons";
+import { FolderIcon, ImageIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { proxyLazyWebpack } from "@webpack";
-import { React } from "@webpack/common";
+import { findCssClassesLazy, proxyLazyWebpack } from "@webpack";
+import { ExpressionPickerStore, React } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
 import { AttachmentAccessory, EmbedAccessory, FilePicker, ImagePicker, VideoPicker } from "./components";
@@ -21,6 +23,35 @@ export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | Fu
 export const EmbedMosaicContext = proxyLazyWebpack(() => React.createContext<null | number>(null));
 export const AttachmentContext = proxyLazyWebpack(() => React.createContext<null | AttachmentItem>(null));
 
+const ButtonWrapperClasses = findCssClassesLazy("button", "buttonWrapper", "notificationDot");
+const ChannelTextAreaClasses = findCssClassesLazy("buttonContainer", "channelTextArea", "button");
+
+function PickerButton({ onClick, children }: { onClick: () => void; children: ReactNode; }) {
+    return (
+        <div className={`expression-picker-chat-input-button ${ChannelTextAreaClasses?.buttonContainer ?? ""}`}>
+            <div
+                role="button"
+                tabIndex={0}
+                className={`${ButtonWrapperClasses?.button ?? ""} ${ChannelTextAreaClasses?.button ?? ""}`}
+                onClick={onClick}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+            >
+                <div className={ButtonWrapperClasses?.buttonWrapper ?? ""}>
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function VideoIcon({ height = 20, width = 20, className }: { height?: number; width?: number; className?: string; }) {
+    return (
+        <svg width={width} height={height} className={className} viewBox="0 0 24 24">
+            <path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
+        </svg>
+    );
+}
+
 export default definePlugin({
     name: "FavouriteAnything",
     description: "Favourite any image, video, or file attachment",
@@ -28,6 +59,17 @@ export default definePlugin({
     managedStyle,
     capturedGifSelect: null as null | ((item: { url: string; }) => void),
     patches: [
+        // CHATBAR BUTTONS
+        {
+            find: '"sticker")',
+            replacement: {
+                // Hook into "_injectButtons" (already patched by ChatInputButtonAPI)
+                // ChatInputButtonAPI emits: _injectButtons(array, arguments[0])
+                // Splice BEFORE the unshift so we work on Discord's original array
+                match: /Vencord\.Api\.ChatButtons\._injectButtons\((\i),arguments\[0\]\)/,
+                replace: "($self.injectMediaButtons($1,arguments[0]),Vencord.Api.ChatButtons._injectButtons($1,arguments[0]))"
+            }
+        },
         // EMBEDS
         {
             find: "this.renderInlineMediaEmbed",
@@ -215,5 +257,61 @@ export default definePlugin({
         thumbnail.search = "";
         thumbnail.hash = item.src;
         return { ...item, src: `${thumbnail}` };
+    },
+    openCustomExpressionPicker(view: ExpressionPickerView, activeViewType: any, channelId: string) {
+        ExpressionPickerStore.setSearchQuery("");
+        (ExpressionPickerStore as any).toggleExpressionPicker(view, activeViewType, channelId);
+    },
+    injectMediaButtons(buttons: ReactNode[], props: ChatBarProps) {
+        // Called BEFORE "_injectButtons", "buttons" is Discord's original array
+        // Find the sticker or gif button to know the right splice index
+        if (props?.disabled) return;
+
+        let insertIdx = buttons.length; // fallback: append at end
+        let gifIdx = -1;
+        let stickerIdx = -1;
+
+        for (let i = 0; i < buttons.length; i++) {
+            const el = buttons[i] as any;
+            if (!el) continue;
+
+            const isSticker =
+                el.key === "sticker" ||
+                el.props?.viewType === "sticker" ||
+                el.props?.type === "sticker";
+
+            const isGif =
+                el.key === "gif" ||
+                el.props?.viewType === "gif" ||
+                el.props?.type === "gif";
+
+            if (isSticker) {
+                stickerIdx = i;
+            }
+
+            if (isGif) {
+                gifIdx = i;
+            }
+        }
+
+        if (gifIdx !== -1) {
+            insertIdx = gifIdx + 1;
+        } else if (stickerIdx !== -1) {
+            insertIdx = stickerIdx;
+        }
+
+        const channelId = props?.channel?.id ?? "";
+
+        buttons.splice(insertIdx, 0,
+            <PickerButton key="fav-image-btn" onClick={() => this.openCustomExpressionPicker(ExpressionPickerView.IMAGE, props?.type, channelId)}>
+                <ImageIcon width={20} height={20} />
+            </PickerButton>,
+            <PickerButton key="fav-video-btn" onClick={() => this.openCustomExpressionPicker(ExpressionPickerView.VIDEO, props?.type, channelId)}>
+                <VideoIcon width={20} height={20} />
+            </PickerButton>,
+            <PickerButton key="fav-files-btn" onClick={() => this.openCustomExpressionPicker(ExpressionPickerView.FILES, props?.type, channelId)}>
+                <FolderIcon width={20} height={20} />
+            </PickerButton>
+        );
     }
 });

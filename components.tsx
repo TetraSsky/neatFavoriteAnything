@@ -183,6 +183,8 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
     const [containerWidth, setContainerWidth] = useState(496);
     useResizeObserver(scrollerRef, ({ width }) => setContainerWidth(width), []);
 
+    useEffect(() => { scrollerRef.current?.scrollTo(0, 0); }, [query]);
+
     const layout = useMemo(
         () => (favs ? computeImageLayout(favs, containerWidth) : []),
         [favs, containerWidth]
@@ -253,6 +255,8 @@ export function VideoPicker({ onSelectItem }: FilePickerProps) {
     const scrollerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(496);
     useResizeObserver(scrollerRef, ({ width }) => setContainerWidth(width), []);
+
+    useEffect(() => { scrollerRef.current?.scrollTo(0, 0); }, [query]);
 
     const layout = useMemo(
         () => (favs ? computeImageLayout(favs, containerWidth) : []),

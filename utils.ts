@@ -301,11 +301,13 @@ function filterImageItems(items: Record<string, FavouriteItem> | null, query?: s
 export function isMediaItem(item: FavouriteItem & { url?: string; }) {
     if (item.format === FavouriteItemFormat.NONE) return false;
 
-    return ImageUtils.isAnimated({
-        original: item.url,
-        src: item.src,
-        animated: false
-    });
+    if (ImageUtils.isAnimated({ original: item.url, src: item.src, animated: false }))
+        return true;
+
+    if (item.format === FavouriteItemFormat.VIDEO)
+        return !isDirectVideoFile(item.url ?? "") && !hasExternalVideoMarker(item.src);
+
+    return false;
 }
 
 const EXTERNAL_VIDEO_MARKER = "#vc-favouriteAnything-video";

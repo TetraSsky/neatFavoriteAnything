@@ -106,7 +106,7 @@
 
 .vc-favouriteAnything-image-fav-button {
     position: absolute;
-    inset-inline-end: 6px;
+    inset-inline-start: 6px;
     top: 6px;
     z-index: 2;
 }
@@ -135,6 +135,25 @@
     &:hover {
         background: var(--interactive-background-hover);
     }
+}
+
+[class*="hoverButtonGroup"]:has(> .vc-favouriteAnything-attachment-accessory) {
+    right: unset !important;
+    inset-inline-end: unset !important;
+    left: 6px !important;
+    inset-inline-start: 6px !important;
+    top: 6px !important;
+    opacity: 0;
+    transform: translateY(-16px);
+}
+
+.full-motion [class*="hoverButtonGroup"]:has(> .vc-favouriteAnything-attachment-accessory) {
+    transition: transform .2s ease, opacity .1s ease;
+}
+
+[class*="mosaicItem"]:is(:hover, :focus-within) [class*="hoverButtonGroup"]:has(> .vc-favouriteAnything-attachment-accessory) {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .vc-favouriteAnything-info-text {

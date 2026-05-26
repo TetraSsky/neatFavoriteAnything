@@ -12,9 +12,9 @@ import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
+import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useState, useStateFromStores } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
-import { Key } from "react";
+import { Key, RefObject } from "react";
 import { JsonValue } from "type-fest";
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from "./polyfills";
@@ -479,6 +479,43 @@ export function useVideoFavourites(searchQuery?: string) {
 // };
 
 // debugWindow.__favAnythingDump = () => getFavouriteItemsSnapshot();
+
+// Virtualization hook for the masonry grid same algorithm from Discord's 'MasonryListScroller'
+// tracks scroll position and returns only the indices of items overlapping the visible viewport (+ buffer)
+const VIRTUALIZATION_BUFFER = 600;
+
+export function useVirtualizedMasonry(
+    scrollerRef: RefObject<HTMLDivElement | null>,
+    layout: { top: number; height: number; }[]
+) {
+    const [scrollTop, setScrollTop] = useState(0);
+    const [viewportHeight, setViewportHeight] = useState(600);
+
+    useEffect(() => {
+        const el = scrollerRef.current;
+        if (!el) return;
+
+        setViewportHeight(el.clientHeight);
+
+        const onScroll = () => setScrollTop(el.scrollTop);
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => el.removeEventListener("scroll", onScroll);
+    }, [scrollerRef.current]);
+
+    return useMemo(() => {
+        const top = scrollTop - VIRTUALIZATION_BUFFER;
+        const bottom = scrollTop + viewportHeight + VIRTUALIZATION_BUFFER;
+
+        const visible: number[] = [];
+        for (let i = 0; i < layout.length; i++) {
+            const item = layout[i];
+            if (item.top + item.height > top && item.top < bottom) {
+                visible.push(i);
+            }
+        }
+        return visible;
+    }, [layout, scrollTop, viewportHeight]);
+}
 
 // Helper hook for the ListScroller component, similar utility is used in the forum channel list view
 // for keeping track of the individual row heights

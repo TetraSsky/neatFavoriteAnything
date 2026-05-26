@@ -16,7 +16,7 @@ import { ComponentProps, ComponentType, ReactNode, Ref } from "react";
 import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, FullMessageAttachment, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
-import { cl, defs, hasPermission, ImageUtils, isDirectVideoFile, markExternalVideoSrc, markStaticImageSrc, sendAttachment, stripExternalVideoMarker, useFavourites, useImageFavourites, useListScroller, useResizeObserver, useVideoFavourites } from "./utils";
+import { cl, defs, hasPermission, ImageUtils, isDirectVideoFile, markExternalVideoSrc, markStaticImageSrc, sendAttachment, stripExternalVideoMarker, useFavourites, useImageFavourites, useListScroller, useResizeObserver, useVirtualizedMasonry, useVideoFavourites } from "./utils";
 
 const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
@@ -199,6 +199,8 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
 
     const totalHeight = itemsBottom + IMAGE_END_CONTAINER_HEIGHT + IMAGE_GUTTER;
 
+    const visibleIndices = useVirtualizedMasonry(scrollerRef, layout);
+
     return (
         <div id="image-picker-tab-panel" role="tabpanel" aria-labelledby="image-picker-tab" className={cl("container")}>
             <div className={cl("container-header")}>
@@ -215,13 +217,13 @@ export function ImagePicker({ onSelectItem }: FilePickerProps) {
                     <div ref={scrollerRef} className={`${ScrollerClasses.thin} ${ScrollerClasses.scrollerBase} ${ScrollerClasses.fade} ${cl("image-results")}`}>
                         <div className={cl("image-content")} style={{ height: totalHeight }}>
                             <div className={cl("image-inner")}>
-                                {favs!.map((item, i) => (
+                                {visibleIndices.map(i => (
                                     <ImagePickerItem
-                                        key={item.url}
-                                        url={item.url}
-                                        src={item.src}
-                                        width={item.width}
-                                        height={item.height}
+                                        key={favs![i].url}
+                                        url={favs![i].url}
+                                        src={favs![i].src}
+                                        width={favs![i].width}
+                                        height={favs![i].height}
                                         layout={layout[i]}
                                         onSubmit={handleSubmit}
                                     />
@@ -272,6 +274,8 @@ export function VideoPicker({ onSelectItem }: FilePickerProps) {
 
     const totalHeight = itemsBottom + VIDEO_END_CONTAINER_HEIGHT + IMAGE_GUTTER;
 
+    const visibleIndices = useVirtualizedMasonry(scrollerRef, layout);
+
     return (
         <div id="video-picker-tab-panel" role="tabpanel" aria-labelledby="video-picker-tab" className={cl("container")}>
             <div className={cl("container-header")}>
@@ -288,13 +292,13 @@ export function VideoPicker({ onSelectItem }: FilePickerProps) {
                     <div ref={scrollerRef} className={`${ScrollerClasses.thin} ${ScrollerClasses.scrollerBase} ${ScrollerClasses.fade} ${cl("image-results")}`}>
                         <div className={cl("image-content")} style={{ height: totalHeight }}>
                             <div className={cl("image-inner")}>
-                                {favs!.map((item, i) => (
+                                {visibleIndices.map(i => (
                                     <VideoPickerItem
-                                        key={item.url}
-                                        url={item.url}
-                                        src={item.src}
-                                        width={item.width}
-                                        height={item.height}
+                                        key={favs![i].url}
+                                        url={favs![i].url}
+                                        src={favs![i].src}
+                                        width={favs![i].width}
+                                        height={favs![i].height}
                                         layout={layout[i]}
                                         onSubmit={handleSubmit}
                                     />
@@ -416,7 +420,7 @@ export function ImagePickerItem({ url, src, width, height, layout, onSubmit }: {
 
     return (
         <div
-            className={cl("image-result")}
+            className={`${GifPickerClasses.result} ${cl("image-result")}`}
             role="button"
             tabIndex={-1}
             style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}
@@ -452,7 +456,7 @@ export function VideoPickerItem({ url, src, width, height, layout, onSubmit }: {
 
     return (
         <div
-            className={cl("image-result")}
+            className={`${GifPickerClasses.result} ${cl("image-result")}`}
             role="button"
             tabIndex={-1}
             style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}

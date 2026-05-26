@@ -301,13 +301,47 @@ function filterImageItems(items: Record<string, FavouriteItem> | null, query?: s
 export function isMediaItem(item: FavouriteItem & { url?: string; }) {
     if (item.format === FavouriteItemFormat.NONE) return false;
 
+    // Items explicitly marked as static images
+    if (item.format === FavouriteItemFormat.IMAGE && hasStaticImageMarker(item.src))
+        return false;
+
     if (ImageUtils.isAnimated({ original: item.url, src: item.src, animated: false }))
         return true;
+
+    if (item.format === FavouriteItemFormat.IMAGE) {
+        // If the item's url is on Discord's CDN = direct attachment (static image)
+        // Otherwise (external url) = native GIF picker or an external embed
+        const urlParsed = URL.parse(item.url ?? "");
+        return !(urlParsed && isAllowedHost(urlParsed.hostname));
+    }
 
     if (item.format === FavouriteItemFormat.VIDEO)
         return !isDirectVideoFile(item.url ?? "") && !hasExternalVideoMarker(item.src);
 
     return false;
+}
+
+const STATIC_IMAGE_MARKER = "#vc-favouriteAnything-image";
+
+export function markStaticImageSrc(raw: string) {
+    const parsed = URL.parse(raw);
+    if (!parsed) return raw;
+    if (parsed.hash === STATIC_IMAGE_MARKER) return raw;
+
+    parsed.hash = STATIC_IMAGE_MARKER;
+    return `${parsed}`;
+}
+
+export function hasStaticImageMarker(raw: string) {
+    return URL.parse(raw)?.hash === STATIC_IMAGE_MARKER;
+}
+
+export function stripStaticImageMarker(raw: string) {
+    const parsed = URL.parse(raw);
+    if (!parsed || parsed.hash !== STATIC_IMAGE_MARKER) return raw;
+
+    parsed.hash = "";
+    return `${parsed}`;
 }
 
 const EXTERNAL_VIDEO_MARKER = "#vc-favouriteAnything-video";

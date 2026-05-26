@@ -16,7 +16,7 @@ import { ComponentProps, ComponentType, ReactNode, Ref } from "react";
 import { AttachmentContext, EmbedContext, EmbedMosaicContext } from ".";
 import { SignedUrlsStore } from "./stores";
 import { AttachmentItem, AttachmentsComponentProps, CustomItemFormat, FavoriteButtonProps, FavouriteItemFormat, FilePickerItemProps, FilePickerProps, FullMessageAttachment, ManaSearchBarProps, MessageComponentClass, ScrollerBaseRef } from "./types";
-import { cl, defs, hasPermission, ImageUtils, isDirectVideoFile, markExternalVideoSrc, sendAttachment, stripExternalVideoMarker, useFavourites, useImageFavourites, useListScroller, useResizeObserver, useVideoFavourites } from "./utils";
+import { cl, defs, hasPermission, ImageUtils, isDirectVideoFile, markExternalVideoSrc, markStaticImageSrc, sendAttachment, stripExternalVideoMarker, useFavourites, useImageFavourites, useListScroller, useResizeObserver, useVideoFavourites } from "./utils";
 
 const ManaSearchBar = findComponentByCodeLazy<ManaSearchBarProps>("#{intl::SEARCH}),ref");
 const FavoriteButton = findComponentByCodeLazy<FavoriteButtonProps>("#{intl::GIF_TOOLTIP_ADD_TO_FAVORITES}");
@@ -513,7 +513,7 @@ export function EmbedAccessory() {
         const isAnimated = ImageUtils.isAnimated({ ...img, original: img.url, src, animated: false });
         if (isAnimated) return null;
 
-        return { ...img, format: FavouriteItemFormat.IMAGE, src };
+        return { ...img, format: FavouriteItemFormat.IMAGE, src: markStaticImageSrc(src) };
     }, [embed, mosaicIndex]);
 
     return (
@@ -548,7 +548,11 @@ export function AttachmentAccessory() {
         if (isAnimated) return null;
 
         if (type in visualMediaFormats) {
-            return { format: visualMediaFormats[type]!, src: originalItem.proxy_url, url: downloadUrl, width, height };
+            const format = visualMediaFormats[type]!;
+            const src = format === FavouriteItemFormat.IMAGE
+                ? markStaticImageSrc(originalItem.proxy_url)
+                : originalItem.proxy_url;
+            return { format, src, url: downloadUrl, width, height };
         }
 
         // Non visual attachments have to be encoded to store metadata in the src property.

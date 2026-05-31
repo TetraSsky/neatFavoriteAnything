@@ -418,6 +418,8 @@ export function ImagePickerItem({ url, src, width, height, layout, onSubmit }: {
         [src, url]
     );
 
+    const [loaded, setLoaded] = useState(false);
+
     return (
         <div
             className={`${GifPickerClasses.result} ${cl("image-result")}`}
@@ -426,7 +428,8 @@ export function ImagePickerItem({ url, src, width, height, layout, onSubmit }: {
             style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}
             onClick={() => onSubmit(url)}
         >
-            <img src={resolvedSrc} alt="" className={cl("image-gif")} draggable={false} />
+            {!loaded && <div className={cl("image-placeholder")} />}
+            <img src={resolvedSrc} alt="" className={cl("image-gif")} draggable={false} onLoad={() => setLoaded(true)} />
             <FavoriteButton
                 className={`${Classes.gifFavoriteButton} ${cl("image-fav-button")}`}
                 format={FavouriteItemFormat.IMAGE}
@@ -454,6 +457,8 @@ export function VideoPickerItem({ url, src, width, height, layout, onSubmit }: {
     const cleanResolvedSrc = stripExternalVideoMarker(resolvedSrc);
     const isDirectVideo = [cleanResolvedSrc, url].some(isDirectVideoFile);
 
+    const [loaded, setLoaded] = useState(false);
+
     return (
         <div
             className={`${GifPickerClasses.result} ${cl("image-result")}`}
@@ -462,10 +467,11 @@ export function VideoPickerItem({ url, src, width, height, layout, onSubmit }: {
             style={layout ? { position: "absolute", left: layout.left, top: layout.top, width: layout.width, height: layout.height } : undefined}
             onClick={() => onSubmit(url)}
         >
+            {!loaded && <div className={cl("image-placeholder")} />}
             {isDirectVideo ? (
-                <video src={cleanResolvedSrc} className={cl("image-gif")} draggable={false} autoPlay muted loop playsInline preload="metadata" />
+                <video src={cleanResolvedSrc} className={cl("image-gif")} draggable={false} autoPlay muted loop playsInline preload="metadata" onLoadedData={() => setLoaded(true)} />
             ) : (
-                <img src={cleanResolvedSrc} alt="" className={cl("image-gif")} draggable={false} />
+                <img src={cleanResolvedSrc} alt="" className={cl("image-gif")} draggable={false} onLoad={() => setLoaded(true)} />
             )}
             <FavoriteButton
                 className={`${Classes.gifFavoriteButton} ${cl("image-fav-button")}`}

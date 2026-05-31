@@ -82,11 +82,20 @@
     top: 0px;
 }
 
+.vc-favouriteAnything-image-placeholder {
+    background: var(--premium-tier-1-purple);
+    border-radius: 4px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
 .vc-favouriteAnything-image-result {
     border-radius: 4px;
     overflow: hidden;
     cursor: pointer;
-    background-color: rgb(146, 154, 250);
 
     [class*="gifFavoriteButton"] {
         opacity: 0;

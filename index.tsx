@@ -260,7 +260,7 @@ export default definePlugin({
     },
     openCustomExpressionPicker(view: ExpressionPickerView, activeViewType: any, channelId: string) {
         ExpressionPickerStore.setSearchQuery("");
-        (ExpressionPickerStore as any).toggleExpressionPicker(view, activeViewType, channelId);
+        (ExpressionPickerStore as any).openExpressionPicker(view, activeViewType, channelId);
     },
     injectMediaButtons(buttons: ReactNode[], props: ChatBarProps) {
         // Called BEFORE "_injectButtons", "buttons" is Discord's original array

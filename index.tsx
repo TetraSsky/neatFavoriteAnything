@@ -265,7 +265,7 @@ export default definePlugin({
     injectMediaButtons(buttons: ReactNode[], props: ChatBarProps) {
         // Called BEFORE "_injectButtons", "buttons" is Discord's original array
         // Find the sticker or gif button to know the right splice index
-        if (props?.disabled) return;
+        if (props?.disabled || props?.type?.analyticsName !== "normal" || !(props as any).showAllButtons) return;
 
         let insertIdx = buttons.length; // fallback: append at end
         let gifIdx = -1;

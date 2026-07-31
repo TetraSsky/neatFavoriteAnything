@@ -116,8 +116,8 @@
 
 .vc-favouriteAnything-image-fav-button {
     position: absolute;
-    inset-inline-start: 6px;
-    top: 6px;
+    inset-inline-end: 4px;
+    top: 4px;
     z-index: 2;
 }
 

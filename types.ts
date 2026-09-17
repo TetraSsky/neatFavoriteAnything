@@ -57,6 +57,21 @@ export interface ExpressionPickerTabProps extends PropsWithChildren {
     viewType: ExpressionPickerView;
 }
 
+// Passes as the `type` prop of the expression picker
+export interface ExpressionPickerType {
+    expressionPicker?: {
+        onlyEmojis?: boolean;
+        emojiIntention?: unknown;
+    };
+    gifs?: { allowSending?: boolean; };
+    stickers?: { allowSending?: boolean; };
+    soundmoji?: { allowSending?: boolean; };
+}
+
+export interface ExpressionPickerProps {
+    type?: ExpressionPickerType;
+}
+
 export interface FavoriteButtonProps extends Omit<FavouriteItem, "order"> {
     url: string;
     gifSrc?: string;

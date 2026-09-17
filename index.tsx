@@ -17,7 +17,7 @@ import { ComponentType, ReactNode } from "react";
 import { AttachmentAccessory, EmbedAccessory, FilePicker, ImagePicker, VideoPicker } from "./components";
 import { SignedUrlsStore } from "./stores";
 import managedStyle from "./style.css?managed";
-import { AttachmentItem, ChatInputButtonProps, EmbedComponent, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat, FullEmbed, GifPickerClass } from "./types";
+import { AttachmentItem, ChatInputButtonProps, EmbedComponent, ExpressionPickerProps, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat, FullEmbed, GifPickerClass } from "./types";
 import { getThumbnailUrl, isMediaItem } from "./utils";
 
 export const EmbedContext = proxyLazyWebpack(() => React.createContext<null | FullEmbed>(null));
@@ -167,7 +167,7 @@ export default definePlugin({
                 {
                     // Insert the custom file picker into the expression picker's body
                     match: /\{onSelectGIF:(\i),[^}]{20,40}\}\):null,(?=(\i)===)/,
-                    replace: "$&$self.renderFilePicker($2,$1),"
+                    replace: "$&$self.renderFilePicker($2,$1,arguments[0]),"
                 }
             ]
         },
@@ -243,7 +243,9 @@ export default definePlugin({
             </>
         );
     },
-    renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void) {
+    renderFilePicker(activeView: ExpressionPickerView, onSelectGIF: (item: { url: string; }) => void, props?: ExpressionPickerProps) {
+        if (props?.type?.expressionPicker?.onlyEmojis) return null;
+
         if (activeView === ExpressionPickerView.IMAGE) {
             return <ImagePicker onSelectItem={item => this.handleSelectItem(item, onSelectGIF)} />;
         }

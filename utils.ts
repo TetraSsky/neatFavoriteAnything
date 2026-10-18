@@ -12,7 +12,7 @@ import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useState, useStateFromStores } from "@webpack/common";
+import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, showToast, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useState, useStateFromStores } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 import { Key, RefObject } from "react";
 import { JsonValue } from "type-fest";
@@ -186,15 +186,10 @@ function applyTitleToFilename(title: string, originalFilename: string) {
 
 export async function sendAttachment(attachment: FullMessageAttachment, channel: Channel) {
     const { filename, title, description } = attachment;
-    const file = await fetchAttachment(attachment).catch(() =>
-        Toasts.show({ message: `Couldn't fetch ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
+    const file = await fetchAttachment(attachment).catch(() => showToast(`Couldn't fetch ${filename}`, 2));
     if (!file) return;
 
-    // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
-    await promptToUpload([file], channel, DraftType.ChannelMessage).catch(() =>
-        Toasts.show({ message: `Couldn't upload ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
+    await promptToUpload([file], channel, DraftType.ChannelMessage).catch(() => showToast(`Couldn't upload ${filename}`, 2));
 
     const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
     const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
@@ -204,7 +199,6 @@ export async function sendAttachment(attachment: FullMessageAttachment, channel:
 
     const [upload] = uploads.splice(uploadIdx);
     UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
-    // Empty titles and descriptions are allowed
     if (title != null) upload.filename = applyTitleToFilename(title, filename);
     if (description != null) upload.description = description;
 
